@@ -1,0 +1,9 @@
+# runtime state — never commit
+*.db
+*.sqlite
+*.sqlite3
+.env
+__pycache__/
+*.pyc
+venv/
+.venv/

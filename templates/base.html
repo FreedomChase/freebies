@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{% block title %}Freebies — Gentle Push{% endblock %}</title>
+<style>
+  :root {
+    --bg:       #0A0A14;
+    --surface:  #12121f;
+    --card:     #1a1a2e;
+    --border:   #2a2a48;
+    --primary:  #0070F3;
+    --primary-h:#338fff;
+    --muted:    #6b7280;
+    --text:     #e8eaf0;
+    --text-dim: #9ca3af;
+    --success:  #10b981;
+    --danger:   #ef4444;
+    --radius:   12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  a { color: var(--primary); text-decoration: none; }
+  a:hover { color: var(--primary-h); }
+
+  /* NAV */
+  nav {
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    gap: 8px;
+    background: var(--surface);
+  }
+  .nav-brand {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text);
+    margin-right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nav-brand span { color: var(--primary); }
+  .nav-links { display: flex; gap: 4px; align-items: center; flex: 1; }
+  .nav-links a {
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    color: var(--text-dim);
+    transition: background 0.15s, color 0.15s;
+  }
+  .nav-links a:hover { background: var(--card); color: var(--text); }
+  .nav-links a.active { background: var(--card); color: var(--text); font-weight: 600; }
+
+  /* MAIN CONTENT */
+  main { flex: 1; padding: 40px 24px; max-width: 760px; margin: 0 auto; width: 100%; }
+  h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 6px; }
+  .subtitle { color: var(--text-dim); font-size: 0.95rem; margin-bottom: 32px; }
+
+  /* CARD */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+
+  /* FORM ELEMENTS */
+  label { display: block; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 6px; }
+  input[type="text"], input[type="url"], textarea {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 0.95rem;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input[type="text"]:focus,
+  input[type="url"]:focus,
+  textarea:focus { border-color: var(--primary); }
+
+  /* BUTTONS */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover:not(:disabled) { opacity: 0.85; }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .btn-ghost:hover:not(:disabled) { border-color: var(--primary); color: var(--text); }
+
+  /* UTILITY */
+  .mt8  { margin-top: 8px; }
+  .mt16 { margin-top: 16px; }
+  .mt24 { margin-top: 24px; }
+  .text-success { color: var(--success); }
+  .text-danger  { color: var(--danger); }
+  .text-muted   { color: var(--text-dim); font-size: 0.85rem; }
+  .mono { font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace; font-size: 0.9rem; }
+
+  /* FOOTER */
+  footer {
+    text-align: center;
+    padding: 20px;
+    color: var(--muted);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+  }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+<nav>
+  <div class="nav-brand">🌿 <span>Gentle Push</span> Freebies</div>
+  <div class="nav-links">
+    <a href="/links"    {% if active == 'links'    %}class="active"{% endif %}>🔗 Link shortener</a>
+    <a href="/qr"       {% if active == 'qr'       %}class="active"{% endif %}>◼ QR code maker</a>
+    <a href="/password" {% if active == 'password' %}class="active"{% endif %}>🔐 Password generator</a>
+  </div>
+</nav>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer>Gentle Push Freebies · Free, always.</footer>
+</body>
+</html>
