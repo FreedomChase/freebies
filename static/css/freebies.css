@@ -171,6 +171,6 @@ input[type="range"] { width: 100%; min-height: 44px; margin: 0; accent-color: va
 .foot > .wrap { padding-block: var(--sec-y); display: grid; gap: 10px; }
 @media (min-width: 720px) { .foot > .wrap { padding-block: var(--sec-y-lg); } }
 .foot p { color: var(--muted); font-size: 0.9375rem; }
-.foot a { display: inline-flex; align-items: center; min-height: 44px; color: var(--muted); }
+.foot a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; color: var(--muted); }
 .brandline { font-weight: 700; letter-spacing: 0.02em; color: var(--ink) !important; display: flex; align-items: center; gap: 8px; }
 .brandline .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--pink); box-shadow: 0 0 0 3px rgba(242, 167, 184, 0.3); }
