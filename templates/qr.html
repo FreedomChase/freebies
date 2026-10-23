@@ -1,143 +1,35 @@
 {% extends "base.html" %}
-{% set active = 'qr' %}
-
-{% block title %}QR Code Maker — Gentle Push Freebies{% endblock %}
-
-{% block head %}
-<style>
-  .qr-layout {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 24px;
-    align-items: start;
-  }
-  @media (max-width: 560px) {
-    .qr-layout { grid-template-columns: 1fr; }
-    .qr-preview { justify-self: center; }
-  }
-  .qr-preview {
-    width: 240px;
-    height: 240px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-  .qr-preview img { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
-  .qr-placeholder { color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 16px; }
-
-  .size-row { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
-  .size-row label { margin: 0; white-space: nowrap; }
-  input[type="range"] { flex: 1; accent-color: var(--primary); }
-  .size-value { width: 54px; text-align: right; font-size: 0.85rem; color: var(--text-dim); }
-
-  textarea { resize: vertical; min-height: 100px; }
-
-  .action-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
-  .dl-link { display: none; }
-</style>
-{% endblock %}
-
+{% block title %}QR code maker · ORIONPATH free tools{% endblock %}
+{% block description %}Turn any text or link into a QR code and download it as a PNG.{% endblock %}
 {% block content %}
-<h1>◼ QR code maker</h1>
-<p class="subtitle">Turn any text or URL into a scannable QR code. No sign-up needed.</p>
+<h1 class="h-tool">QR code maker</h1>
+<p class="lede">Turn any text or link into a QR code and download it as a PNG. Nothing is stored.</p>
 
-<div class="card">
-  <div class="qr-layout">
-    <div>
-      <label for="qrText">Text or URL</label>
-      <textarea id="qrText" placeholder="https://example.com — or any text, Wi-Fi password, vCard…" maxlength="1000"></textarea>
-
-      <div class="size-row">
-        <label for="sizeRange">Size</label>
-        <input type="range" id="sizeRange" min="100" max="600" step="50" value="300" oninput="updateSizeLabel()" />
-        <span class="size-value" id="sizeLabel">300 px</span>
-      </div>
-
-      <div class="action-row">
-        <button class="btn btn-primary" id="generateBtn" onclick="generate()">Generate QR</button>
-        <a class="btn btn-ghost dl-link" id="downloadBtn" download="qrcode.png">Download PNG</a>
-      </div>
-      <p id="errorMsg" class="text-danger mt8" style="display:none;"></p>
+<div class="panel qr-layout">
+  <form id="qrForm" novalidate>
+    <label for="qrText">Text or link</label>
+    <textarea id="qrText" maxlength="1000" rows="4" placeholder="https://example.com, a Wi-Fi code or any text"></textarea>
+    <label for="sizeRange">Size <output id="sizeLabel" for="sizeRange">300 px</output></label>
+    <input type="range" id="sizeRange" min="100" max="600" step="50" value="300">
+    <div class="row">
+      <button class="btn" id="generateBtn" type="submit">Make QR code</button>
+      <a class="btn btn-quiet" id="downloadBtn" download="qrcode.png" hidden>Download PNG</a>
     </div>
-
-    <div class="qr-preview" id="qrPreview">
-      <div class="qr-placeholder">Your QR code<br>will appear here</div>
-    </div>
-  </div>
+    <p class="msg err" id="errorMsg" role="alert" hidden></p>
+  </form>
+  <figure class="qr-preview" id="qrPreview" aria-live="polite">
+    <p class="note" id="qrPlaceholder">Your QR code appears here.</p>
+    <img id="qrImage" alt="QR code for the text you entered" hidden>
+  </figure>
 </div>
 
-<div class="card" style="font-size:0.875rem; color: var(--text-dim);">
-  <strong style="color:var(--text);">💡 Tips</strong>
-  <ul style="margin-top:10px; padding-left:18px; line-height:1.9;">
-    <li>Prefix URLs with <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">https://</code> for direct browser opens.</li>
-    <li>Use <code style="background:var(--surface);padding:1px 5px;border-radius:4px;">WIFI:S:NetworkName;T:WPA;P:password;;</code> for Wi-Fi QR codes.</li>
-    <li>Download at a larger size for better print quality.</li>
+<section class="facts" aria-labelledby="tipsTitle">
+  <h2 id="tipsTitle">Tips</h2>
+  <ul>
+    <li>Start links with <code>https://</code> so phones open them straight away.</li>
+    <li>For Wi-Fi, use <code>WIFI:S:NetworkName;T:WPA;P:password;;</code></li>
+    <li>Download a bigger size for print.</li>
   </ul>
-</div>
-
-<script>
-const textArea   = document.getElementById('qrText');
-const sizeRange  = document.getElementById('sizeRange');
-const sizeLabel  = document.getElementById('sizeLabel');
-const generateBtn= document.getElementById('generateBtn');
-const previewEl  = document.getElementById('qrPreview');
-const downloadBtn= document.getElementById('downloadBtn');
-const errorMsg   = document.getElementById('errorMsg');
-
-let debounce;
-
-function updateSizeLabel() {
-  sizeLabel.textContent = sizeRange.value + ' px';
-}
-
-textArea.addEventListener('input', () => {
-  clearTimeout(debounce);
-  debounce = setTimeout(generate, 600);
-});
-
-async function generate() {
-  const text = textArea.value.trim();
-  if (!text) {
-    previewEl.innerHTML = '<div class="qr-placeholder">Your QR code<br>will appear here</div>';
-    downloadBtn.style.display = 'none';
-    errorMsg.style.display = 'none';
-    return;
-  }
-  generateBtn.disabled = true;
-  errorMsg.style.display = 'none';
-
-  const size = sizeRange.value;
-  const url  = `/api/qr?text=${encodeURIComponent(text)}&size=${size}`;
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      showError(j.error || 'Failed to generate QR code');
-      return;
-    }
-    const blob   = await res.blob();
-    const objUrl = URL.createObjectURL(blob);
-
-    previewEl.innerHTML = `<img src="${objUrl}" alt="QR code" />`;
-
-    downloadBtn.href = objUrl;
-    downloadBtn.style.display = 'inline-flex';
-  } catch {
-    showError('Network error — is the server running?');
-  } finally {
-    generateBtn.disabled = false;
-  }
-}
-
-function showError(msg) {
-  errorMsg.textContent = msg;
-  errorMsg.style.display = 'block';
-}
-</script>
+</section>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/qr.js') }}" defer></script>{% endblock %}

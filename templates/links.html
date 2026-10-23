@@ -1,186 +1,40 @@
 {% extends "base.html" %}
-{% set active = 'links' %}
-
-{% block title %}Link Shortener — Gentle Push Freebies{% endblock %}
-
-{% block head %}
-<style>
-  .result-box {
-    display: none;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    margin-top: 16px;
-  }
-  .result-box.visible { display: block; }
-  .short-url-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .short-url-input {
-    background: var(--bg) !important;
-    flex: 1;
-    cursor: text;
-  }
-  .copy-btn {
-    flex-shrink: 0;
-    padding: 10px 16px;
-    font-size: 0.85rem;
-  }
-  .copy-btn.copied { background: var(--success) !important; }
-
-  /* Recent links table */
-  .links-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-  .links-table th {
-    text-align: left;
-    padding: 8px 12px;
-    color: var(--text-dim);
-    border-bottom: 1px solid var(--border);
-    font-weight: 500;
-  }
-  .links-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-  }
-  .links-table tr:last-child td { border-bottom: none; }
-  .links-table .url-cell {
-    max-width: 280px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .clicks-badge {
-    display: inline-block;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 99px;
-    padding: 2px 10px;
-    font-size: 0.8rem;
-    color: var(--text-dim);
-  }
-  .empty-state { color: var(--text-dim); font-size: 0.9rem; padding: 24px 0; text-align: center; }
-</style>
-{% endblock %}
-
+{% block title %}Link shortener · ORIONPATH free tools{% endblock %}
+{% block description %}Turn a long link into a short one. No account. Only public web addresses.{% endblock %}
 {% block content %}
-<h1>🔗 Link shortener</h1>
-<p class="subtitle">Paste a long URL and get a tidy short link in one click.</p>
+<h1 class="h-tool">Link shortener</h1>
+<p class="lede">Turn a long link into a short one. Only public web addresses are accepted.</p>
 
-<div class="card">
-  <label for="urlInput">Long URL</label>
-  <input type="url" id="urlInput" placeholder="https://example.com/very/long/link?with=lots&of=params" autocomplete="off" />
-
-  <button class="btn btn-primary mt16" id="shortenBtn" onclick="shorten()">Shorten →</button>
-
-  <div class="result-box" id="resultBox">
-    <p class="text-muted" style="margin-bottom:10px;">Your short link</p>
-    <div class="short-url-row">
-      <input class="short-url-input" id="shortUrlInput" type="text" readonly />
-      <button class="btn btn-ghost copy-btn" id="copyBtn" onclick="copyUrl()">Copy</button>
-    </div>
-    <p id="originalPreview" class="text-muted mt8" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></p>
+<form class="panel" id="shortenForm" novalidate>
+  <label for="urlInput">Long link</label>
+  <div class="row">
+    <input id="urlInput" name="url" type="url" inputmode="url" autocomplete="off" placeholder="https://example.com/a/very/long/link" maxlength="2048" required>
+    <button class="btn" id="shortenBtn" type="submit">Shorten</button>
   </div>
+  <p class="msg err" id="errorMsg" role="alert" hidden></p>
+  <div class="result" id="resultBox" hidden>
+    <label for="shortUrlInput">Short link</label>
+    <div class="row">
+      <input id="shortUrlInput" type="text" readonly>
+      <button class="btn btn-quiet" id="copyBtn" type="button">Copy</button>
+    </div>
+    <p class="note" id="originalPreview"></p>
+  </div>
+</form>
 
-  <p id="errorMsg" class="text-danger mt8" style="display:none;"></p>
-</div>
+<section class="panel" id="recentCard" hidden aria-labelledby="recentTitle">
+  <h2 id="recentTitle">Your recent links</h2>
+  <p class="note">Only this browser can see this list. Clearing site data forgets it.</p>
+  <ul class="recent" id="recentList"></ul>
+</section>
 
-<!-- Recent links by this browser session -->
-<div class="card" id="recentCard" style="display:none;">
-  <h3 style="font-size:1rem;font-weight:600;margin-bottom:16px;">Your recent links</h3>
-  <table class="links-table">
-    <thead>
-      <tr>
-        <th>Short link</th>
-        <th>Original URL</th>
-        <th>Clicks</th>
-      </tr>
-    </thead>
-    <tbody id="recentTableBody"></tbody>
-  </table>
-</div>
-
-<script>
-const urlInput  = document.getElementById('urlInput');
-const shortenBtn= document.getElementById('shortenBtn');
-const resultBox = document.getElementById('resultBox');
-const shortInput= document.getElementById('shortUrlInput');
-const copyBtn   = document.getElementById('copyBtn');
-const errorMsg  = document.getElementById('errorMsg');
-const origPrev  = document.getElementById('originalPreview');
-
-// Shorten on Enter
-urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') shorten(); });
-
-async function shorten() {
-  const url = urlInput.value.trim();
-  if (!url) return;
-
-  shortenBtn.disabled = true;
-  errorMsg.style.display = 'none';
-  resultBox.classList.remove('visible');
-
-  try {
-    const res  = await fetch('/api/shorten', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    });
-    const data = await res.json();
-
-    if (!res.ok) {
-      showError(data.error || 'Something went wrong');
-    } else {
-      shortInput.value = data.short_url;
-      origPrev.textContent = '→ ' + data.original_url;
-      resultBox.classList.add('visible');
-      copyBtn.textContent = 'Copy';
-      copyBtn.classList.remove('copied');
-      loadRecent();
-    }
-  } catch {
-    showError('Network error — is the server running?');
-  } finally {
-    shortenBtn.disabled = false;
-  }
-}
-
-function showError(msg) {
-  errorMsg.textContent = msg;
-  errorMsg.style.display = 'block';
-}
-
-function copyUrl() {
-  navigator.clipboard.writeText(shortInput.value).then(() => {
-    copyBtn.textContent = 'Copied!';
-    copyBtn.classList.add('copied');
-    setTimeout(() => {
-      copyBtn.textContent = 'Copy';
-      copyBtn.classList.remove('copied');
-    }, 2000);
-  });
-}
-
-async function loadRecent() {
-  const res  = await fetch('/api/recent-links');
-  const data = await res.json();
-  const body = document.getElementById('recentTableBody');
-  const card = document.getElementById('recentCard');
-
-  if (!data.length) { card.style.display = 'none'; return; }
-  card.style.display = 'block';
-
-  body.innerHTML = data.map(l => `
-    <tr>
-      <td class="mono"><a href="${l.short_url}" target="_blank">${l.short_url.replace(location.origin, '')}</a></td>
-      <td class="url-cell"><span title="${l.original_url}">${l.original_url}</span></td>
-      <td><span class="clicks-badge">${l.clicks} click${l.clicks === 1 ? '' : 's'}</span></td>
-    </tr>
-  `).join('');
-}
-
-loadRecent();
-</script>
+<section class="facts" aria-labelledby="factsTitle">
+  <h2 id="factsTitle">What we keep</h2>
+  <ul>
+    <li>The long link, its short code, when it was made and how many times it was opened.</li>
+    <li>No IP address and no account. Your list is tied to a random key stored in this browser.</li>
+    <li>Links to private or local network addresses are refused.</li>
+  </ul>
+</section>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/links.js') }}" defer></script>{% endblock %}
