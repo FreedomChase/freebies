@@ -4,6 +4,7 @@ Configuration for the USB Router connection manager.
 Precedence (highest first):
   1. Environment variables  (USB_ROUTER_*)
   2. /config/usb-router.conf      -- the FAT partition on the stick, editable from Windows/macOS
+     /boot/firmware/usb-router.conf -- the same on the Raspberry Pi Zero build (its FAT boot partition)
   3. /etc/usb-router/usb-router.conf -- defaults baked into the image
   4. Built-in defaults below
 
@@ -53,6 +54,7 @@ DEFAULTS = {
 CONF_PATHS = [
     "/etc/usb-router/usb-router.conf",
     "/config/usb-router.conf",
+    "/boot/firmware/usb-router.conf",   # Raspberry Pi Zero build (pizero/)
 ]
 
 STATE_DIR = Path(os.environ.get("USB_ROUTER_STATE_DIR", "/var/lib/usb-router"))

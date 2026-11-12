@@ -1,0 +1,28 @@
+[Unit]
+Description=USB Router kiosk for the Pi Zero W (cog / WPE WebKit on the screen, no X)
+After=usb-router-connect.service systemd-user-sessions.service
+Wants=usb-router-connect.service
+# the kiosk owns tty1 and the screen
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+
+[Service]
+Type=simple
+User=kiosk
+# a logind session on tty1 gives the kiosk user the screen (DRM) and input devices
+PAMName=login
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+SupplementaryGroups=video render input audio
+Environment=PYTHONUNBUFFERED=1
+# cog and cogctl talk over a private session bus
+ExecStart=/usr/bin/dbus-run-session -- /usr/bin/python3 /opt/usb-router/pizero/kiosk.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

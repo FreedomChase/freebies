@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content unavailable</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="unavail">
+<!-- Shown by the Pi Zero kiosk (pizero/kiosk.py) when the content URL does not answer.
+     The kiosk itself retries and navigates away; this page only says so. -->
+<div class="unavail-box">
+  <h1 class="unavail-title">Content unavailable</h1>
+  <p class="unavail-url" id="u"></p>
+  <p class="unavail-detail"><span id="r"></span> &middot; screen <span id="s"></span></p>
+</div>
+<script src="unavailable.js"></script>
+</body>
+</html>

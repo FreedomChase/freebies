@@ -93,6 +93,7 @@ Hotspot clients get `10.42.0.x`; the stick is `10.42.0.1`.
 | `config/usb-router.conf.example` | Every setting, with comments. |
 | `tests/` | pytest suite against a fake NetworkManager, plus the fleet dashboard. |
 | `HARDWARE.md` | Compute sticks, flash drives, adapters and power supplies to order. |
+| `pizero/` | The Raspberry Pi Zero W build (ARMv6, 512 MB): cog / WPE WebKit instead of Qt WebEngine, installer for Raspberry Pi OS Lite, ARMv6 container test. See [pizero/README.md](pizero/README.md). |
 
 ## Build the sticks
 

@@ -116,3 +116,9 @@ code, kbd { background: var(--panel-2); border: 1px solid var(--line); padding: 
 
 .pin { border-color: var(--warn); }
 .pin-value { font-size: 2.4rem; font-weight: 700; letter-spacing: 0.25em; font-variant-numeric: tabular-nums; padding: 6px 0; }
+
+/* "Content unavailable" screen for the Pi Zero kiosk (unavailable.html). Always dark: it is a signage screen. */
+body.unavail { background: #0e1116; color: #e8ecf2; align-items: center; justify-content: center; text-align: center; }
+.unavail-box { padding: 24px; max-width: 90vw; }
+.unavail-title { font-size: 2rem; font-weight: 600; margin-bottom: 0.75rem; }
+.unavail-url, .unavail-detail { color: #93a0b4; font-size: 1.1rem; word-break: break-all; }
