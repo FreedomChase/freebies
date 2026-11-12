@@ -109,25 +109,43 @@ class Router:
         self.stop(manual=False)
         return self.start()
 
-    def status(self):
+    def status(self, online=None):
         s = self.nm.hotspot_status()
         s["ssid"] = self.cfg.get("hotspot_ssid") if s["mode"] == "wifi" else None
+        s["password"] = self.cfg.get("hotspot_password") if s["mode"] == "wifi" else None
         s["last_error"] = self.last_error
         s["enabled"] = self.cfg.flag("hotspot_enabled") and not self.auto_disabled
+        # "setup" = we are broadcasting without an uplink so a phone can configure us
+        s["setup"] = bool(s["active"] and online is False)
+        s["ui_url"] = f"http://{s['ip'] or '10.42.0.1'}:{self.cfg.get('listen_port')}" if s["active"] else None
         return s
 
+    def wants_setup_hotspot(self):
+        return self.cfg.flag("setup_hotspot") and not self.auto_disabled
+
     # -- background keeper -------------------------------------------------
-    def run_keeper(self, is_online, interval=10):
-        """Start the hotspot automatically when online and configured to do so."""
+    def run_keeper(self, is_online, interval=10, grace=25):
+        """
+        Keep the hotspot up:
+          online  + hotspot_enabled  -> share the internet connection
+          offline + setup_hotspot    -> broadcast anyway (after a grace period, so a
+                                        provisioned Wi-Fi gets a chance to connect first)
+                                        and serve the setup page to phones
+        """
+        started = time.time()
+
         def loop():
             while True:
                 try:
-                    if self.cfg.flag("hotspot_enabled") and not self.auto_disabled:
-                        if is_online() and not self.nm.hotspot_status()["active"]:
-                            try:
-                                self.start()
-                            except NetError:
-                                pass  # already stored in last_error; retry next tick
+                    online = is_online()
+                    active = self.nm.hotspot_status()["active"]
+                    want = (online and self.cfg.flag("hotspot_enabled") and not self.auto_disabled) or \
+                           (not online and self.wants_setup_hotspot() and time.time() - started > grace)
+                    if want and not active:
+                        try:
+                            self.start()
+                        except NetError:
+                            pass  # already stored in last_error; retry next tick
                 except Exception as e:  # never let the keeper die
                     log.exception("keeper error: %s", e)
                 time.sleep(interval)

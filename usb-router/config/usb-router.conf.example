@@ -1,35 +1,74 @@
-# USB Router configuration
+# USB Router / signage screen configuration
 #
 # Copy this file to the USBROUTER drive on the stick as "usb-router.conf"
-# (it is a normal FAT drive, so you can edit it from Windows or macOS), or to
-# /etc/usb-router/usb-router.conf inside the image. Settings changed from the
-# web page are saved on the stick and override the values here.
+# (a normal FAT drive, editable from Windows or macOS). Settings changed from
+# the on-screen page or the fleet dashboard are saved on the stick and override
+# the values here.
 
 [usb-router]
-# Page the browser opens once the computer is online.
+# ---------------------------------------------------------------- content ---
+# What the screen shows once online. {device_id} and {device_name} are replaced,
+# so one file can serve a whole batch of sticks:
+#   homepage = https://signage.example.com/play?screen={device_id}
 homepage = https://duckduckgo.com
 
-# true  = once online, the browser goes fullscreen with no address bar
-#         (F11 or Esc brings the address bar back; Ctrl+N opens the network screen)
-# false = a normal browser window with tabs; F11 toggles fullscreen
-kiosk = false
+# true  = fullscreen, no address bar (signage). F11 or Esc brings the bar back,
+#         Ctrl+N opens this setup page.
+# false = a normal browser window with tabs; F11 toggles fullscreen.
+kiosk = true
+allow_exit = false
 
-# Allow the Quit button / Ctrl+Q in the browser.
-allow_exit = true
+# Reload the content every N minutes (0 = never). Useful for dashboards that
+# leak memory or pages without their own refresh.
+reload_every = 0
 
-# Share the internet connection automatically once online.
+# Portrait panels: left | right | inverted | normal
+rotation = normal
+
+# --------------------------------------------------------------- identity ---
+# Leave device_id blank to derive a stable ID from the hardware (scr-xxxxxxxx).
+# Set it when you pre-assign screens, e.g. device_id = lobby-left
+device_id =
+device_name =
+
+# -------------------------------------------------------- zero-touch Wi-Fi ---
+# Fill these in and the screen joins the network by itself; nobody has to touch
+# it. Up to three networks (venue, staff, your phone's hotspot as a fallback).
+wifi_ssid =
+wifi_password =
+wifi_ssid_2 =
+wifi_password_2 =
+wifi_ssid_3 =
+wifi_password_3 =
+
+# ----------------------------------------------------- phone-based setup ---
+# While the screen is offline it broadcasts the hotspot below so you can set it
+# up from a phone: join the Wi-Fi, open http://10.42.0.1:8080, pick the venue's
+# network. QR codes for both steps are shown on the screen.
+setup_hotspot = true
+
+# ------------------------------------------------------------ sharing -------
+# Once online, share the connection out of a spare adapter (second Wi-Fi card
+# or Ethernet port) so nearby devices can use it.
 hotspot_enabled = true
 hotspot_ssid = USB-Router
 hotspot_password = changeme123
-# bg = 2.4 GHz (works with every device), a = 5 GHz (faster, shorter range)
+# bg = 2.4 GHz (works with every phone), a = 5 GHz
 hotspot_band = bg
 
-# Serve the web page to devices on the hotspot too (http://10.42.0.1:8080).
-# When enabled, set an admin PIN; it is required for any change made from
-# another device. The screen attached to the stick never needs the PIN.
-lan_access = false
+# Serve this page to devices on the hotspot too. Needed for phone-based setup.
+# The admin PIN is required for changes made from another device (sent as the
+# X-Admin-Pin header; the on-screen page never needs it).
+lan_access = true
 admin_pin =
 
-# How we decide we are really online (a 204 means no login page is in the way).
+# ------------------------------------------------------ display network -----
+# Optional central dashboard (see fleet/). Screens report in every
+# fleet_interval seconds and pick up URL / rotation / reboot changes.
+fleet_url =
+fleet_token =
+fleet_interval = 60
+
+# ------------------------------------------------------------ internals ----
 check_url = http://connectivitycheck.gstatic.com/generate_204
 check_fallback_url = http://detectportal.firefox.com/success.txt

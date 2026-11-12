@@ -1,8 +1,11 @@
 // Let the kiosk user (group netdev) control NetworkManager without a password:
 // scan, connect, create the hotspot profile, enable/disable networking.
+// Also allow reboot / power-off so the fleet dashboard can restart a screen.
 polkit.addRule(function(action, subject) {
-    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 &&
-        subject.isInGroup("netdev")) {
+    if (subject.isInGroup("netdev") && (
+        action.id.indexOf("org.freedesktop.NetworkManager.") === 0 ||
+        action.id.indexOf("org.freedesktop.login1.reboot") === 0 ||
+        action.id.indexOf("org.freedesktop.login1.power-off") === 0)) {
         return polkit.Result.YES;
     }
 });

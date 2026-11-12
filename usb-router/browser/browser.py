@@ -24,22 +24,55 @@ import sys
 import urllib.request
 
 from PyQt6.QtCore import QTimer, QUrl, Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QIcon, QKeySequence
+from PyQt6.QtGui import QAction, QColor, QIcon, QKeySequence, QPalette
 from PyQt6.QtWebEngineCore import QWebEngineDownloadRequest, QWebEnginePage, QWebEngineProfile, QWebEngineSettings
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import (QApplication, QLineEdit, QMainWindow, QMessageBox, QProgressBar,
-                             QStyle, QTabWidget, QToolBar, QWidget, QSizePolicy)
+from PyQt6.QtWidgets import (QApplication, QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar,
+                             QStyle, QTabWidget, QToolBar, QVBoxLayout, QWidget)
 
 APP_NAME = "USB Router Browser"
 DEFAULT_CONNECT_URL = os.environ.get("USB_ROUTER_CONNECT_URL", "http://127.0.0.1:8080")
 
 
-def fetch_json(url, timeout=3):
+def fetch_json(url, timeout=3, data=None):
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
+        req = urllib.request.Request(url, data=json.dumps(data).encode() if data is not None else None,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except Exception:
         return None
+
+
+class Overlay(QWidget):
+    """Full-window 'content unavailable, retrying' notice for signage screens."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setAutoFillBackground(True)
+        pal = self.palette()
+        pal.setColor(QPalette.ColorRole.Window, QColor("#0e1116"))
+        self.setPalette(pal)
+        layout = QVBoxLayout(self)
+        layout.addStretch()
+        self.title = QLabel("Reconnecting…")
+        self.title.setStyleSheet("color:#e8ecf2;font-size:32px;font-weight:600;")
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.detail = QLabel("")
+        self.detail.setStyleSheet("color:#93a0b4;font-size:18px;")
+        self.detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.detail.setWordWrap(True)
+        layout.addWidget(self.title)
+        layout.addWidget(self.detail)
+        layout.addStretch()
+        self.hide()
+
+    def show_message(self, title, detail):
+        self.title.setText(title)
+        self.detail.setText(detail)
+        self.setGeometry(self.parent().rect())
+        self.raise_()
+        self.show()
 
 
 class Page(QWebEnginePage):
@@ -77,6 +110,11 @@ class Browser(QMainWindow):
         self.homepage = args.home or "https://duckduckgo.com"
         self.connect_mode = not args.no_connect
         self.html_fullscreen = False
+        self.reload_every = 0
+        self.last_homepage = None
+        self.was_online = None
+        self.fail_count = 0
+        self.device_id = None
 
         self.profile = QWebEngineProfile("usb-router", self)
         self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies)
@@ -99,14 +137,25 @@ class Browser(QMainWindow):
         self.statusBar().addPermanentWidget(self.progress, 1)
         self.statusBar().setSizeGripEnabled(False)
 
+        self.overlay = Overlay(self)
+
         first = self.new_tab(args.connect_url if self.connect_mode else self.homepage)
+        self.poll = QTimer(self)
+        self.poll.timeout.connect(self.poll_manager)
         if self.connect_mode:
             self.set_connect_mode(True)
-            self.poll = QTimer(self)
-            self.poll.timeout.connect(self.poll_manager)
             self.poll.start(2000)
-        elif self.kiosk:
-            self.enter_kiosk()
+        else:
+            self.poll.start(4000)
+            if self.kiosk:
+                self.enter_kiosk()
+
+        # watchdog: retry failed loads with backoff, periodic reload for signage
+        self.retry = QTimer(self)
+        self.retry.setSingleShot(True)
+        self.retry.timeout.connect(self.retry_load)
+        self.reload_timer = QTimer(self)
+        self.reload_timer.timeout.connect(self.scheduled_reload)
 
     # -- chrome ------------------------------------------------------------
     def _build_toolbar(self):
@@ -167,7 +216,7 @@ class Browser(QMainWindow):
         tab.titleChanged.connect(lambda title, t=tab: self.tabs.setTabText(self.tabs.indexOf(t), (title or "New tab")[:32]))
         tab.iconChanged.connect(lambda icon, t=tab: self.tabs.setTabIcon(self.tabs.indexOf(t), icon))
         tab.loadProgress.connect(lambda p, t=tab: self.progress.setValue(p) if t is self.current() else None)
-        tab.loadFinished.connect(lambda ok, t=tab: self.progress.setValue(0) if t is self.current() else None)
+        tab.loadFinished.connect(lambda ok, t=tab: self.on_load_finished(t, ok))
         tab.page().fullScreenRequested.connect(self.on_html_fullscreen)
         idx = self.tabs.addTab(tab, "New tab")
         self.tabs.setCurrentIndex(idx)
@@ -191,6 +240,39 @@ class Browser(QMainWindow):
         if tab is self.current():
             self.url_bar.setText(url.toString())
             self.url_bar.setCursorPosition(0)
+
+    def on_load_finished(self, tab, ok):
+        if tab is not self.current():
+            return
+        self.progress.setValue(0)
+        url = tab.url().toString()
+        is_local = url.startswith(self.args.connect_url)
+        if ok:
+            self.fail_count = 0
+            self.overlay.hide()
+            if not is_local:
+                fetch_json(self.args.connect_url.rstrip("/") + "/api/browser/report", data={"url": url})
+        elif not is_local and not self.connect_mode:
+            # content failed (server down, DNS, no network): keep the screen tidy and retry
+            self.fail_count += 1
+            delay = min(60, 5 * 2 ** min(self.fail_count, 4))
+            if self.kiosk:
+                self.overlay.show_message("Content unavailable",
+                                          f"{url}\nRetrying in {delay} s  ·  screen {self.device_id or ''}")
+            self.retry.start(delay * 1000)
+
+    def retry_load(self):
+        if self.current() and not self.connect_mode:
+            self.current().reload()
+
+    def scheduled_reload(self):
+        if self.current() and not self.connect_mode and not self.current().url().toString().startswith(self.args.connect_url):
+            self.current().reload()
+
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        if self.overlay.isVisible():
+            self.overlay.setGeometry(self.rect())
 
     # -- navigation --------------------------------------------------------
     def navigate_to_input(self):
@@ -225,17 +307,45 @@ class Browser(QMainWindow):
         data = fetch_json(self.args.connect_url.rstrip("/") + "/api/browser/poll")
         if not data:
             return
-        self.homepage = self.args.home or data.get("homepage") or self.homepage
+        new_home = self.args.home or data.get("homepage") or self.homepage
         self.allow_exit = bool(data.get("allow_exit", True))
         self.quit_action.setVisible(self.allow_exit)
+        self.device_id = data.get("device_id")
         kiosk = self.args.kiosk or bool(data.get("kiosk"))
+        online = bool(data.get("online"))
+
+        # periodic reload interval (minutes) from settings / fleet
+        every = int(data.get("reload_every") or 0)
+        if every != self.reload_every:
+            self.reload_every = every
+            self.reload_timer.stop()
+            if every > 0:
+                self.reload_timer.start(every * 60 * 1000)
 
         target = data.get("navigate")
+        action = data.get("action")
         if target:
             # explicit request from the page: "Start browsing" or "Open the sign-in page"
-            self.leave_connect_mode(target, kiosk if data.get("online") else False)
-        elif self.connect_mode and data.get("online"):
+            self.leave_connect_mode(target, kiosk if online else False)
+        elif self.connect_mode and online:
+            self.homepage = new_home
             self.leave_connect_mode(self.homepage, kiosk)
+        elif not self.connect_mode:
+            # remote change of what the screen shows (settings page or fleet dashboard)
+            if new_home != self.homepage and self.last_homepage is not None and self.kiosk:
+                self.homepage = new_home
+                self.current().setUrl(QUrl(new_home))
+            self.homepage = new_home
+            # network came back: reload the content instead of leaving an error page up
+            if online and self.was_online is False and self.kiosk:
+                self.current().reload()
+        self.last_homepage = self.homepage
+        self.was_online = online
+
+        if action == "reload" and self.current():
+            self.current().reload()
+        elif action == "restart":
+            QApplication.exit(3)  # the session script restarts us
 
     def leave_connect_mode(self, url, kiosk):
         self.kiosk = kiosk

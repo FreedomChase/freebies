@@ -5,27 +5,42 @@
 export QT_QPA_PLATFORM=xcb
 export QT_AUTO_SCREEN_SCALE_FACTOR=1
 export XDG_CURRENT_DESKTOP=usb-router
+APP=/opt/usb-router
+MANAGER=http://127.0.0.1:8080
 
-xset s off -dpms          # never blank the screen
+xset s off -dpms          # never blank the screen (signage)
 xset s noblank
 xsetroot -solid "#0e1116" 2>/dev/null
 command -v unclutter >/dev/null && unclutter --timeout 3 --fork 2>/dev/null
 
-openbox --config-file /opt/usb-router/scripts/openbox-rc.xml &
+openbox --config-file $APP/scripts/openbox-rc.xml &
 WM=$!
 
 # Wait for the connection manager to come up (systemd starts it in parallel).
 for i in $(seq 1 30); do
-  if curl -fs http://127.0.0.1:8080/healthz >/dev/null 2>&1; then break; fi
+  if curl -fs $MANAGER/healthz >/dev/null 2>&1; then break; fi
   sleep 1
 done
+
+# Screen rotation for portrait panels (rotation = normal|left|right|inverted).
+ROT=$(curl -fs $MANAGER/api/display 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("rotation","normal"))' 2>/dev/null || echo normal)
+OUT=$(xrandr --query 2>/dev/null | awk '/ connected/{print $1; exit}')
+[ -n "$OUT" ] && [ "$ROT" != "normal" ] && xrandr --output "$OUT" --rotate "$ROT" 2>/dev/null
+
+# Route audio to HDMI when a HDMI sink exists (TVs / panels with speakers).
+if command -v pactl >/dev/null; then
+  for i in 1 2 3 4 5; do pactl info >/dev/null 2>&1 && break; sleep 1; done
+  HDMI=$(pactl list short sinks 2>/dev/null | awk '/hdmi/{print $2; exit}')
+  [ -n "$HDMI" ] && pactl set-default-sink "$HDMI" 2>/dev/null
+  pactl set-sink-mute @DEFAULT_SINK@ 0 2>/dev/null; pactl set-sink-volume @DEFAULT_SINK@ 80% 2>/dev/null
+fi
 
 EXTRA=""
 [ -f /config/kiosk ] && EXTRA="--kiosk"
 
-# If the browser crashes or is quit, bring it back.
+# If the browser crashes, is quit, or asks to be restarted (exit 3), bring it back.
 while :; do
-  python3 /opt/usb-router/browser/browser.py $EXTRA
+  python3 $APP/browser/browser.py $EXTRA
   code=$?
   [ "$code" -eq 0 ] && [ -f /var/lib/usb-router/exit-to-shell ] && break
   sleep 1

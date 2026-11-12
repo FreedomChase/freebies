@@ -12,7 +12,7 @@ NO_X=0; [ "${1:-}" = "--no-x" ] && NO_X=1
 
 echo "==> packages"
 apt-get update
-PKGS="network-manager dnsmasq-base iw wireless-regdb python3 python3-flask curl"
+PKGS="network-manager dnsmasq-base iw wireless-regdb python3 python3-flask python3-qrcode python3-pil curl"
 [ "$NO_X" -eq 0 ] && PKGS="$PKGS xserver-xorg xinit openbox unclutter-xfixes x11-xserver-utils python3-pyqt6 python3-pyqt6.qtwebengine fonts-dejavu fonts-noto-core"
 # shellcheck disable=SC2086
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $PKGS

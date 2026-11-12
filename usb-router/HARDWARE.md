@@ -1,74 +1,101 @@
-# Hardware for USB Router
+# Hardware for a display network
 
-## The USB stick
+## The one thing to know first
 
-Any stick works, but boot and persistence speed depend almost entirely on
-random-write performance, which cheap sticks are terrible at.
+**A monitor or LCD panel cannot boot a USB stick.** It has no CPU. The software
+on this stick needs a small computer plugged into the screen's HDMI port. So
+"the USB device to order" is really two things:
+
+1. a **HDMI compute stick** (a PC the size of a USB stick) for each screen, and
+2. the **USB flash drive** that carries this software, one per screen or one
+   per installer, depending on how you deploy (see below).
+
+Commercial displays with a built-in player (Samsung Tizen, LG webOS, Philips
+Android SoC) cannot run this either. For those, point their own browser at the
+same content URL, and use the fleet dashboard only for the compute-stick screens.
+
+## HDMI compute sticks (one per screen)
+
+Fanless x86-64, HDMI out, Wi-Fi, at least 4 GB RAM. All of these boot Debian
+from USB and have Intel Wi-Fi (`iwlwifi`), which works out of the box and can
+run the setup hotspot.
+
+| Model | Notes |
+|---|---|
+| **MeLE PCG02 Pro / PCG02 (N4000, N5105, N100)** | Fanless, 8 GB RAM on the Pro, two USB-A ports plus USB-C power, runs cool 24/7. Best value. |
+| **Azulle Access4 / Access Pro** | Same class, Ethernet port on the Pro models (handy for wired venues). Pricier. |
+| **Intel Compute Stick STK2m3W64CC** | Discontinued; fine second-hand. Avoid the Atom "STK1" models (2 GB RAM is too little for Chromium). |
+| **Mini PC with HDMI (Beelink, GMKtec N100)** | Not stick-shaped, but with 2 Ethernet ports and VESA-mountable; use when a screen needs wired LAN or sharing. |
+
+Order with the stick:
+
+- A **5 V/3 A USB power supply** per screen. Monitor USB ports give 0.9 A and
+  will brown out the stick. TVs with a USB 3 port sometimes manage; do not rely on it.
+- A short **HDMI extender cable** if the stick will not fit behind the screen.
+- In the stick's BIOS set **Power On After Power Loss / AC Recovery = On** so
+  screens come back after a power cut without anyone pressing a button.
+
+## USB flash drives
 
 | Pick | Why |
 |---|---|
-| **Samsung FIT Plus 64 GB** or **SanDisk Ultra Fit 64 GB** (USB 3.1) | Tiny, can stay plugged in permanently, fast enough. 32 GB is plenty; 64 GB costs the same. |
-| **Samsung BAR Plus 64 GB** | Metal body, better heat handling if the machine runs 24/7. |
-| For a fleet: a **USB-to-M.2 / NVMe enclosure** with a cheap 128 GB SSD | Behaves like a real disk; persistence feels like an installed system. ~3x the price. |
+| **Samsung FIT Plus 32/64 GB** or **SanDisk Ultra Fit** | Tiny, stays plugged in behind the screen, fast random writes. |
+| Anything branded, USB 3, 16 GB+ | Works; cheaper sticks boot slower and wear faster. |
 
-Minimum 8 GB. Avoid USB 2.0 sticks and anything unbranded.
+Minimum 8 GB. Avoid USB 2.0 and unbranded drives.
 
-## Wi-Fi adapters (for the hotspot)
+### Two ways to deploy
 
-If the PC's own Wi-Fi card is used to get online, the stick needs a second
-adapter to broadcast a hotspot. It must support **AP mode** with an **in-kernel
-Linux driver**; many consumer dongles do not. These are known to work with
-Debian 12's kernel without extra drivers:
+- **Boot from the USB drive** (simplest): one flash drive per screen stays
+  plugged into the compute stick permanently. Nothing on the compute stick is
+  touched.
+- **Install to the compute stick's internal storage** (cleaner): boot once from
+  the flash drive, open a terminal (Ctrl+Alt+T) and run
+  `sudo /opt/usb-router/build/make-usb.sh /config/usb-router.iso /dev/mmcblk0`
+  (put the ISO on the `USBROUTER` partition first; make it 2 GB with the third
+  argument of `make-usb.sh`). The compute stick then boots on its own and the
+  flash drive moves on to the next screen.
 
-| Adapter | Chipset / driver | Band | Notes |
-|---|---|---|---|
-| **ALFA AWUS036ACM** | MT7612U / `mt76` | 2.4 + 5 GHz, AC1200 | Best choice. Solid AP mode, external antennas, good range. |
-| **ALFA AWUS036AXML** | MT7921AU / `mt7921u` | Wi-Fi 6 | Needs kernel 6.1+ (Debian 12 ok). Newer, more expensive. |
-| **Panda PAU09** | RT5572 / `rt2800usb` | 2.4 + 5 GHz, N600 | Reliable budget option; the driver has supported AP mode for years. |
-| **Panda PAU06** | RT5372 / `rt2800usb` | 2.4 GHz, N300 | Cheapest working option. |
-| **TP-Link Archer T2U Plus / T3U** | RTL8821AU/RTL8812BU | AC | AP mode works but may need `rtl8821au-dkms` / `rtl88x2bu-dkms`; verify the hardware revision. |
-| Edimax EW-7811Un **v1** | RTL8188CUS / `rtl8192cu` | 2.4 GHz, N150 | Tiny; AP mode works but only ~5 clients comfortably. v2 (RTL8188EUS) is worse. |
+## Wi-Fi adapters
 
-Rule of thumb: **MediaTek (mt76) or Ralink (rt2800usb) chipsets work; Realtek is
-a gamble; Broadcom USB does not do AP mode.** When in doubt, search the chipset
-plus "AP mode linux" before ordering, and check the revision printed on the box.
+For a signage screen the built-in Intel card does everything: connects to the
+venue Wi-Fi, and broadcasts the setup hotspot while offline. You only need an
+extra adapter when a screen should also **share** internet to nearby devices
+while itself online over Wi-Fi (one card cannot do both). Then add an
+AP-capable USB adapter with an in-kernel driver:
 
-Check an adapter from the stick's terminal (Ctrl+Alt+T): `iw list | grep -A8 "Supported interface modes"` must list `* AP`.
+| Adapter | Chipset / driver | Notes |
+|---|---|---|
+| **ALFA AWUS036ACM** | MT7612U / `mt76` | Best. Dual band, external antennas. |
+| **Panda PAU09** | RT5572 / `rt2800usb` | Reliable budget choice. |
+| **Panda PAU06** | RT5372 / `rt2800usb` | Cheapest working option, 2.4 GHz only. |
 
-Built-in laptop cards (Intel `iwlwifi`, most Qualcomm `ath9k`/`ath10k`) do AP
-mode fine, so a laptop online over Ethernet needs no extra hardware.
+MediaTek (`mt76`) and Ralink (`rt2800usb`) work; Realtek is a gamble; Broadcom
+USB does not do AP mode. Check with `iw list | grep -A8 "Supported interface modes"`
+on the stick; it must list `* AP`. Verify the chipset revision before ordering.
 
-## Ethernet
+## Wired and mobile
 
-A **USB 3.0 Gigabit adapter with a Realtek RTL8153 or ASIX AX88179** chipset
-(TP-Link UE300, Anker, UGREEN, Cable Matters) adds a wired port for either the
-uplink or wired sharing. All are supported out of the box.
+- **USB 3 Gigabit adapter** (RTL8153 or AX88179: TP-Link UE300, UGREEN, Anker)
+  for venues that give you a cable. Supported out of the box.
+- **4G/5G USB dongle in HiLink mode** (Huawei E3372h, ZTE MF833) for screens
+  with no venue network. Appears as Ethernet; no setup needed beyond the SIM.
 
-## Mobile broadband
+## Screens
 
-USB 4G/5G dongles that present as a network card (Huawei E3372h **HiLink**, ZTE
-MF833, most "USB Wi-Fi stick" style modems from carriers) just work: they appear
-as Ethernet. Dongles in **Stick** mode (`E3372s`) go through ModemManager, which
-is installed, but need an APN and sometimes a SIM PIN, so prefer HiLink.
+Any HDMI display. For portrait, set `rotation = left` or `right`. Panels with
+speakers get audio over HDMI automatically. If a screen has a "no signal"
+power-down timer, turn it off; the stick never blanks the output but some
+displays sleep anyway during the boot's black frames.
 
-## The PC
-
-Anything x86-64 that boots from USB. Secure Boot may need to be disabled for the
-live image. For a permanent router, a fanless mini-PC with two Ethernet ports
-and an Intel Wi-Fi card (many N100 boxes) gives you wired WAN, wired LAN and a
-hotspot with no extra adapters. Intel Wi-Fi cards only allow 5 GHz AP mode on
-certain channels due to regulatory rules; leave `hotspot_band = bg` for those.
-
-Raspberry Pi is a different (ARM) image and is not covered by `build-iso.sh`;
-`scripts/install-local.sh` on Raspberry Pi OS gets you the same software.
-
-## Shopping list for one unit
+## Shopping list per screen
 
 | Item | Approx. |
 |---|---|
-| Samsung FIT Plus 64 GB | £12 / $15 |
-| ALFA AWUS036ACM (only needed when the uplink is Wi-Fi) | £35 / $40 |
-| USB 3 Gigabit Ethernet adapter (optional) | £12 / $15 |
+| MeLE PCG02 Pro (N4000/N5105) | £100-£150 / $120-$180 |
+| 5 V/3 A USB power supply | £8 / $10 |
+| Samsung FIT Plus 32 GB | £8 / $10 |
+| ALFA AWUS036ACM (only for screens that must also share internet over Wi-Fi) | £35 / $40 |
 
-Prices are indicative; verify current pricing and the chipset revision before
-ordering.
+Prices are indicative; check current pricing and that the compute stick ships
+with the RAM you expect.

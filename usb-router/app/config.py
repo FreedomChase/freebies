@@ -17,16 +17,31 @@ import os
 from pathlib import Path
 
 DEFAULTS = {
-    "homepage": "https://duckduckgo.com",
-    "kiosk": "false",                 # true = browser goes fullscreen with no toolbar once online
-    "allow_exit": "true",             # false = hide the Quit button in the browser
+    # -- what the screen shows
+    "homepage": "https://duckduckgo.com",  # may contain {device_id} and {device_name}
+    "kiosk": "true",                  # true = browser goes fullscreen with no toolbar once online
+    "allow_exit": "false",            # false = hide the Quit button in the browser
+    "reload_every": "0",              # minutes; 0 = never reload the page on a timer
+    "rotation": "normal",             # normal | left | right | inverted (portrait screens)
+    # -- identity (for the display network)
+    "device_id": "",                  # blank = derived from the machine's hardware
+    "device_name": "",                # e.g. "Lobby left"; shown in the fleet dashboard
+    "fleet_url": "",                  # e.g. https://signage.example.com/fleet  (see fleet/)
+    "fleet_token": "",                # shared secret sent as Authorization: Bearer
+    "fleet_interval": "60",           # seconds between heartbeats
+    # -- zero-touch Wi-Fi: profiles created at boot, connected automatically
+    "wifi_ssid": "", "wifi_password": "",
+    "wifi_ssid_2": "", "wifi_password_2": "",
+    "wifi_ssid_3": "", "wifi_password_3": "",
+    # -- phone-based setup when there is no keyboard: hotspot while offline
+    "setup_hotspot": "true",
     "hotspot_enabled": "true",        # start sharing the uplink automatically once online
     "hotspot_ssid": "USB-Router",
     "hotspot_password": "changeme123",  # 8+ chars (WPA2)
     "hotspot_band": "bg",             # bg = 2.4 GHz (widest compatibility), a = 5 GHz
     "listen_host": "127.0.0.1",
     "listen_port": "8080",
-    "lan_access": "false",            # true = also serve the UI on the hotspot LAN side
+    "lan_access": "true",             # serve the UI on the hotspot side too (phone-based setup)
     "admin_pin": "",                  # required for LAN access to admin actions when lan_access=true
     "check_url": "http://connectivitycheck.gstatic.com/generate_204",
     "check_fallback_url": "http://detectportal.firefox.com/success.txt",
@@ -89,7 +104,9 @@ class Config:
 
     # -- saving ------------------------------------------------------------
     EDITABLE = ("homepage", "kiosk", "allow_exit", "hotspot_enabled",
-                "hotspot_ssid", "hotspot_password", "hotspot_band")
+                "hotspot_ssid", "hotspot_password", "hotspot_band",
+                "reload_every", "rotation", "device_name", "fleet_url", "fleet_token",
+                "fleet_interval", "setup_hotspot")
 
     def save(self, updates: dict) -> dict:
         changed = {}
@@ -97,8 +114,17 @@ class Config:
             if key not in self.EDITABLE:
                 continue
             value = str(value).strip()
-            if key in ("kiosk", "allow_exit", "hotspot_enabled"):
+            if key in ("kiosk", "allow_exit", "hotspot_enabled", "setup_hotspot"):
                 value = "true" if _truthy(value) else "false"
+            if key in ("reload_every", "fleet_interval"):
+                if not value.isdigit():
+                    raise ValueError(f"{key} must be a whole number")
+                if key == "fleet_interval" and int(value) < 10:
+                    value = "10"
+            if key == "rotation" and value not in ("normal", "left", "right", "inverted"):
+                raise ValueError("rotation must be normal, left, right or inverted")
+            if key == "fleet_url" and value and not value.lower().startswith(("http://", "https://")):
+                raise ValueError("fleet_url must start with http:// or https://")
             if key == "hotspot_password" and value and len(value) < 8:
                 raise ValueError("Hotspot password must be at least 8 characters")
             if key == "hotspot_ssid" and not (1 <= len(value.encode()) <= 32):
@@ -126,10 +152,59 @@ class Config:
     def flag(self, key: str) -> bool:
         return _truthy(self.values[key])
 
+    # -- identity ----------------------------------------------------------
+    def device_id(self) -> str:
+        """Stable per-stick ID: configured, else from the machine-id / first MAC."""
+        configured = self.get("device_id").strip()
+        if configured:
+            return configured
+        for path in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
+            try:
+                mid = Path(path).read_text().strip()
+                if mid:
+                    return "scr-" + mid[:8]
+            except OSError:
+                pass
+        try:
+            for iface in sorted(os.listdir("/sys/class/net")):
+                if iface == "lo":
+                    continue
+                mac = Path(f"/sys/class/net/{iface}/address").read_text().strip().replace(":", "")
+                if mac and mac != "000000000000":
+                    return "scr-" + mac[-8:]
+        except OSError:
+            pass
+        return "scr-unknown"
+
+    def resolve_url(self, url: str | None = None) -> str:
+        """Expand {device_id} / {device_name} placeholders in the homepage."""
+        url = url if url is not None else self.get("homepage")
+        name = self.get("device_name") or self.device_id()
+        return url.replace("{device_id}", self.device_id()).replace("{device_name}", name)
+
+    def provisioned_wifi(self):
+        """[(ssid, password), ...] from the config file, for zero-touch setup."""
+        out = []
+        for suffix in ("", "_2", "_3"):
+            ssid = self.get("wifi_ssid" + suffix).strip()
+            if ssid:
+                out.append((ssid, self.get("wifi_password" + suffix) or None))
+        return out
+
     def public(self) -> dict:
-        """Settings safe to show in the UI (no admin PIN)."""
+        """Settings safe to show in the UI (no admin PIN, no fleet token)."""
         return {
             "homepage": self.get("homepage"),
+            "resolved_homepage": self.resolve_url(),
+            "device_id": self.device_id(),
+            "device_name": self.get("device_name"),
+            "reload_every": int(self.get("reload_every") or 0),
+            "rotation": self.get("rotation"),
+            "fleet_url": self.get("fleet_url"),
+            "fleet_configured": bool(self.get("fleet_url")),
+            "fleet_interval": int(self.get("fleet_interval") or 60),
+            "setup_hotspot": self.flag("setup_hotspot"),
+            "provisioned_wifi": [s for s, _ in self.provisioned_wifi()],
             "kiosk": self.flag("kiosk"),
             "allow_exit": self.flag("allow_exit"),
             "hotspot_enabled": self.flag("hotspot_enabled"),

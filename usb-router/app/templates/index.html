@@ -12,8 +12,8 @@
   <div class="brand">
     <span class="logo" aria-hidden="true"></span>
     <div>
-      <h1>USB Router</h1>
-      <p class="sub">Connect this computer to the internet, then share it.</p>
+      <h1>USB Router <span id="device-label" class="device-label"></span></h1>
+      <p class="sub">Connect this screen to the internet, then it shows your content.</p>
     </div>
   </div>
   <div id="status-pill" class="pill pill-offline" role="status" aria-live="polite">
@@ -22,6 +22,23 @@
 </header>
 
 <main>
+  <!-- Phone-based setup (no keyboard on the screen) -->
+  <section id="setup-card" class="card setup hidden">
+    <div class="setup-text">
+      <h2>Set this screen up from your phone</h2>
+      <ol>
+        <li>Join the Wi-Fi network <strong id="setup-ssid"></strong> with password <strong id="setup-pass"></strong></li>
+        <li>Open <strong id="setup-url"></strong> on your phone</li>
+        <li>Pick the venue's Wi-Fi and enter its password. The screen connects and starts on its own.</li>
+      </ol>
+      <p class="hint">Screen ID <code id="setup-id"></code>. Or plug in a keyboard and use this page directly.</p>
+    </div>
+    <div class="qr-pair">
+      <figure><img id="qr-wifi" alt="QR code to join the setup Wi-Fi" width="180" height="180"><figcaption>1. Join Wi-Fi</figcaption></figure>
+      <figure><img id="qr-ui" alt="QR code for the setup page" width="180" height="180"><figcaption>2. Open setup page</figcaption></figure>
+    </div>
+  </section>
+
   <!-- Captive portal banner -->
   <section id="portal-banner" class="banner hidden">
     <div>
@@ -36,9 +53,10 @@
     <h2>You're online</h2>
     <p id="online-detail"></p>
     <div class="row">
-      <button id="go-browse" class="btn btn-primary btn-big">Start browsing</button>
+      <button id="go-browse" class="btn btn-primary btn-big">Show content</button>
       <input id="go-url" class="input grow" type="url" placeholder="or type a web address…" spellcheck="false">
     </div>
+    <p class="hint">Content: <code id="online-homepage"></code>. The screen opens it on its own in a few seconds.</p>
   </section>
 
   <div class="grid">
@@ -103,6 +121,7 @@
             <option value="a">5 GHz (faster)</option>
           </select></label>
       </div>
+      <label class="check"><input type="checkbox" id="setup-hotspot"> Broadcast while offline so a phone can set this screen up</label>
       <div class="row wrap">
         <label class="field"><span>Share using</span>
           <select id="hs-iface" class="input"><option value="">Automatic</option></select></label>
@@ -116,15 +135,41 @@
       <p id="hs-error" class="error" role="alert"></p>
     </section>
 
-    <!-- Browser settings -->
+    <!-- Screen / content settings -->
     <section class="card" id="settings-card">
-      <div class="card-head"><h2>Browser</h2></div>
-      <label class="field"><span>Home page</span>
+      <div class="card-head"><h2>This screen</h2></div>
+      <label class="field"><span>Content URL (may contain <code>{device_id}</code> or <code>{device_name}</code>)</span>
         <input id="set-homepage" class="input" type="text" placeholder="https://…"></label>
-      <label class="check"><input type="checkbox" id="set-kiosk"> Fullscreen kiosk mode when online (no address bar, press F11 to leave)</label>
+      <div class="row wrap">
+        <label class="field"><span>Screen name</span><input id="set-name" class="input" type="text" placeholder="Lobby left"></label>
+        <label class="field"><span>Rotation</span>
+          <select id="set-rotation" class="input">
+            <option value="normal">Landscape</option><option value="left">Portrait (rotate left)</option>
+            <option value="right">Portrait (rotate right)</option><option value="inverted">Upside down</option>
+          </select></label>
+        <label class="field"><span>Reload content every (min, 0 = never)</span><input id="set-reload" class="input" type="number" min="0" step="1"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="set-kiosk"> Fullscreen kiosk mode when online (no address bar; F11 brings it back)</label>
       <label class="check"><input type="checkbox" id="set-exit"> Allow quitting the browser</label>
       <div class="row"><button id="set-save" class="btn">Save</button><span id="set-msg" class="muted"></span></div>
-      <p class="hint">Tip: these can also be set in <code>usb-router.conf</code> on the stick's <code>USBROUTER</code> drive.</p>
+      <div class="row wrap actions">
+        <button class="btn" data-action="reload">Reload content</button>
+        <button class="btn" data-action="restart-browser">Restart browser</button>
+        <button class="btn btn-danger" data-action="reboot">Reboot screen</button>
+      </div>
+      <p class="hint">Tip: these can also be set in <code>usb-router.conf</code> on the stick's <code>USBROUTER</code> drive, or remotely from the fleet dashboard.</p>
+    </section>
+
+    <!-- Fleet dashboard -->
+    <section class="card" id="fleet-card">
+      <div class="card-head"><h2>Display network</h2><span id="fleet-state" class="tag"></span></div>
+      <label class="field"><span>Dashboard URL</span><input id="set-fleet-url" class="input" type="text" placeholder="https://signage.example.com/fleet"></label>
+      <div class="row wrap">
+        <label class="field"><span>Token</span><input id="set-fleet-token" class="input" type="password" placeholder="(unchanged)"></label>
+        <label class="field"><span>Heartbeat every (s)</span><input id="set-fleet-interval" class="input" type="number" min="10" step="1"></label>
+      </div>
+      <div class="row"><button id="fleet-save" class="btn">Save &amp; send heartbeat</button><span id="fleet-msg" class="muted"></span></div>
+      <p class="hint">The dashboard sees every screen's status and can change its content URL, rotation or reboot it. Run your own from <code>fleet/</code>.</p>
     </section>
   </div>
 </main>

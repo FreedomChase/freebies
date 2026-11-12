@@ -42,6 +42,10 @@
       $("online-card").classList.add("hidden");
     }
     $("portal-banner").classList.toggle("hidden", !s.captive_portal);
+    $("online-homepage").textContent = s.settings.resolved_homepage;
+    $("device-label").textContent = (s.device.name ? `${s.device.name} · ` : "") + s.device.id;
+    renderSetup(s);
+    renderFleet(s);
     $("portal-open").onclick = () => api("/api/browser/go", { method: "POST", body: { url: s.portal_url || "http://neverssl.com" } })
       .catch((e) => toast(e.message, "bad"));
     renderDevices(s.devices, up);
@@ -54,9 +58,58 @@
       state.status = await api(`/api/status${force ? "?force=1" : ""}`);
       renderStatus(state.status);
     } catch (e) {
+      console.error("status refresh failed", e);
       $("status-text").textContent = "Connection manager unreachable";
     }
   };
+
+  /* ---------------- phone setup ---------------- */
+  let setupShown = false;
+  const renderSetup = (s) => {
+    const h = s.hotspot;
+    const show = !s.online && h.active && h.mode === "wifi";
+    $("setup-card").classList.toggle("hidden", !show);
+    if (show && !setupShown) {
+      setupShown = true;
+      $("qr-wifi").src = `/api/qr?kind=wifi&t=${Date.now()}`;
+      $("qr-ui").src = `/api/qr?kind=ui&t=${Date.now()}`;
+    }
+    if (!show) setupShown = false;
+    $("setup-ssid").textContent = h.ssid || ""; $("setup-pass").textContent = h.password || "(none)";
+    $("setup-url").textContent = h.ui_url || ""; $("setup-id").textContent = s.device.id;
+  };
+
+  /* ---------------- fleet ---------------- */
+  const renderFleet = (s) => {
+    const f = s.fleet, tag = $("fleet-state");
+    if (!f.configured) { tag.textContent = "not configured"; tag.className = "tag"; return; }
+    if (f.last_contact) { tag.textContent = `last contact ${Math.round(Date.now() / 1000 - f.last_contact)} s ago`; tag.className = "tag ok"; }
+    else { tag.textContent = f.last_error ? "unreachable" : "connecting…"; tag.className = "tag"; }
+  };
+  $("fleet-save").onclick = async (e) => {
+    busy(e.target, true); $("fleet-msg").textContent = "";
+    const body = { fleet_url: $("set-fleet-url").value, fleet_interval: $("set-fleet-interval").value };
+    if ($("set-fleet-token").value) body.fleet_token = $("set-fleet-token").value;
+    try {
+      await api("/api/settings", { method: "POST", body });
+      if (body.fleet_url) { const r = await api("/api/fleet/ping", { method: "POST" }); $("fleet-msg").textContent = "Heartbeat sent" + (Object.keys(r.changed || {}).length ? `, dashboard updated: ${Object.keys(r.changed).join(", ")}` : "."); }
+      else $("fleet-msg").textContent = "Saved.";
+      $("set-fleet-token").value = "";
+    } catch (err) { $("fleet-msg").textContent = err.message; }
+    busy(e.target, false); refreshStatus();
+  };
+
+  /* ---------------- system actions ---------------- */
+  document.querySelectorAll("[data-action]").forEach((b) => {
+    b.onclick = async () => {
+      const a = b.dataset.action;
+      if (a === "reboot" && !confirm("Reboot this screen now?")) return;
+      busy(b, true);
+      try { await api("/api/system", { method: "POST", body: { action: a } }); toast(a === "reboot" ? "Rebooting…" : "Done", "ok"); }
+      catch (e) { toast(e.message, "bad"); }
+      busy(b, false);
+    };
+  });
 
   /* ---------------- devices ---------------- */
   const renderDevices = (devices, up) => {
@@ -208,6 +261,10 @@
     } catch (err) { $("hs-error").textContent = err.message; }
     busy(e.target, false); refreshStatus();
   };
+  $("setup-hotspot").onchange = async (e) => {
+    try { await api("/api/settings", { method: "POST", body: { setup_hotspot: e.target.checked } }); } catch (err) { toast(err.message, "bad"); }
+    refreshStatus();
+  };
   $("hotspot-enabled").onchange = async (e) => {
     try { await api("/api/settings", { method: "POST", body: { hotspot_enabled: e.target.checked } }); } catch (err) { toast(err.message, "bad"); }
     refreshStatus();
@@ -216,13 +273,16 @@
   /* ---------------- settings ---------------- */
   const fillSettings = (s) => {
     $("hs-ssid").value = s.hotspot_ssid; $("hs-pass").value = s.hotspot_password; $("hs-band").value = s.hotspot_band;
-    $("hotspot-enabled").checked = s.hotspot_enabled;
+    $("hotspot-enabled").checked = s.hotspot_enabled; $("setup-hotspot").checked = s.setup_hotspot;
     $("set-homepage").value = s.homepage; $("set-kiosk").checked = s.kiosk; $("set-exit").checked = s.allow_exit;
+    $("set-name").value = s.device_name; $("set-rotation").value = s.rotation; $("set-reload").value = s.reload_every;
+    $("set-fleet-url").value = s.fleet_url; $("set-fleet-interval").value = s.fleet_interval;
   };
   $("set-save").onclick = async (e) => {
     busy(e.target, true);
     try {
-      const r = await api("/api/settings", { method: "POST", body: { homepage: $("set-homepage").value, kiosk: $("set-kiosk").checked, allow_exit: $("set-exit").checked } });
+      const r = await api("/api/settings", { method: "POST", body: { homepage: $("set-homepage").value, kiosk: $("set-kiosk").checked, allow_exit: $("set-exit").checked,
+        device_name: $("set-name").value, rotation: $("set-rotation").value, reload_every: $("set-reload").value } });
       fillSettings(r.settings); $("set-msg").textContent = "Saved."; setTimeout(() => ($("set-msg").textContent = ""), 2000);
     } catch (err) { toast(err.message, "bad"); }
     busy(e.target, false);

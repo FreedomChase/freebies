@@ -1,88 +1,109 @@
-# USB Router
+# USB Router — plug-in player for a display network
 
-A bootable USB stick that turns any PC or laptop into an internet router with a
-built-in browser.
+A bootable USB stick that turns a HDMI compute stick (or any PC) into a signage
+player with its own router. Plug it into a screen, power on, and the screen
+gets itself online and shows your content fullscreen. No keyboard needed: the
+screen can be set up from a phone, or pre-configured so nobody touches it at all.
 
-Plug it in, boot from it, and the screen shows a connection page. Pick a Wi-Fi
-network (or plug in a cable or a 4G dongle). The moment the stick is online it
-shares that connection out of a spare adapter as a Wi-Fi hotspot or over an
-Ethernet cable, and a custom browser opens on your chosen home page. Press F11
-for fullscreen, or set kiosk mode and it goes fullscreen on its own.
+- **Connects** over Wi-Fi, Ethernet or a 4G dongle, with hotel/café sign-in
+  pages detected and surfaced.
+- **Shows your content** in a custom Chromium-based browser: fullscreen kiosk,
+  per-screen URLs, portrait rotation, a watchdog that retries when the content
+  server is down, and scheduled reloads.
+- **Routes**: once online it can share the connection as a Wi-Fi hotspot or
+  over Ethernet, and while offline it broadcasts a setup hotspot so a phone can
+  configure it.
+- **Reports in** to a small fleet dashboard (included) where you see every
+  screen and change its URL, rotation or reboot it remotely.
 
-Nothing is installed on the PC. Pull the stick out and the machine is untouched.
+Nothing is installed on the host machine. Pull the stick and it is untouched.
 
-![The connection page, online and sharing](docs/connection-page.png)
+![The on-screen setup page, online and sharing](docs/connection-page.png)
 
+> A monitor cannot boot a USB stick by itself. Each screen needs a small HDMI
+> compute stick for this to run on. **See [HARDWARE.md](HARDWARE.md) before ordering.**
+
+## Setting up a screen: three ways
+
+**1. Zero-touch (recommended for a batch).** Before writing the sticks, put the
+venue Wi-Fi and the content URL in `usb-router.conf`:
+
+```ini
+homepage = https://signage.example.com/play?screen={device_id}
+wifi_ssid = Venue-Staff
+wifi_password = ********
+fleet_url = https://signage.example.com
+fleet_token = ********
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  USB stick (Debian live)                                             │
-│                                                                      │
-│   NetworkManager ◄──── app/server.py (Flask, port 8080) ◄── browser  │
-│   │  uplink: wifi / ethernet / 4g     │ web page: scan, connect,     │
-│   │  hotspot: ipv4.method=shared      │ hotspot, settings            │
-│   │  (dnsmasq DHCP + NAT)             │                              │
-│   └── wlan1 / eth1 ──► phones, laptops, TVs      browser/browser.py  │
-│                                                  (Qt WebEngine)      │
-└──────────────────────────────────────────────────────────────────────┘
-```
 
-## What is in this folder
+Plug in, power on, done. The screen joins the Wi-Fi, opens the URL with its own
+ID filled in, and appears in the dashboard where you can name it and change
+what it shows.
 
-| Path | What it is |
-|------|------------|
-| `app/` | The connection-manager web app (Flask). Scans Wi-Fi, connects, detects captive portals, runs the hotspot, stores settings. |
-| `browser/browser.py` | The custom browser (PyQt6 / Qt WebEngine, Chromium inside). Tabs, address bar, F11 fullscreen, HTML5 fullscreen, kiosk mode. |
-| `system/` | systemd units, polkit rule and NetworkManager config that glue it together. |
-| `scripts/` | The X session that starts the browser, and `install-local.sh` for installing on an existing Debian box instead of a stick. |
-| `build/` | `build-iso.sh` builds the bootable image with Debian live-build. `make-usb.sh` writes it to a stick and adds the persistence and config partitions. |
-| `config/usb-router.conf.example` | All settings, with comments. |
-| `tests/` | pytest suite that runs against a fake NetworkManager. |
-| `HARDWARE.md` | Which USB sticks and Wi-Fi adapters to order, and why. |
+**2. From a phone (screen mounted, no keyboard).** With nothing pre-configured
+the screen shows two QR codes after about 25 seconds offline: scan the first to
+join its setup hotspot, the second to open its setup page. Pick the venue Wi-Fi,
+type the password, and the screen connects and starts. The hotspot drops when
+the screen's single Wi-Fi card switches over; that is expected.
 
-## How it behaves at boot
+![Phone-based setup screen with QR codes](docs/setup-page.png)
 
-1. The PC boots from the stick (Debian 12 live, BIOS and UEFI).
-2. NetworkManager starts. An Ethernet cable or a known 4G dongle connects on its own.
-3. The connection manager (`app/server.py`) starts on `http://127.0.0.1:8080`.
-4. The `kiosk` user is logged in on tty1, X starts, and the browser opens the
-   connection page with no toolbar.
-5. You pick a Wi-Fi network and type the password. The page checks for real
-   internet (a `204` from a connectivity URL). If a hotel or café login page is
-   in the way, it says so and offers to open it.
-6. Once online:
-   - the hotspot starts on a spare adapter (if `hotspot_enabled`), and
-   - the browser unlocks its toolbar and goes to the home page, or straight to
-     fullscreen if `kiosk = true`.
-7. Saved networks, settings and downloads persist on the stick between boots.
+**3. With a keyboard.** The same setup page is on the screen itself. Ctrl+N
+brings it back any time; F11 toggles fullscreen.
 
-`Ctrl+N` in the browser brings the connection page back at any time.
+## What happens at boot
+
+1. Debian 12 live boots (BIOS and UEFI). NetworkManager starts; wired and
+   provisioned Wi-Fi connections come up on their own.
+2. The connection manager (`app/server.py`) starts on `http://127.0.0.1:8080`
+   and creates auto-connect profiles for the `wifi_ssid*` entries in the config.
+3. The `kiosk` user logs in on tty1, X starts, rotation and HDMI audio are set,
+   and the browser opens the setup page with no toolbar.
+4. Offline for 25 s with `setup_hotspot = true`: the setup hotspot and QR codes appear.
+5. Online: the browser goes fullscreen on the content URL (`kiosk = true`), the
+   sharing hotspot starts if a spare adapter exists, and heartbeats go to the
+   fleet dashboard if configured.
+6. Content server down? The browser shows a "Content unavailable, retrying"
+   screen with the screen ID and retries with backoff. Network back? It reloads.
+7. Saved networks, settings and downloads persist on the stick.
 
 ### Which adapter becomes the hotspot
 
 | Internet comes from | Hotspot runs on |
 |---|---|
-| Ethernet cable | the PC's built-in Wi-Fi card |
-| Wi-Fi | a second, AP-capable USB Wi-Fi adapter, otherwise a free Ethernet port (wired sharing) |
-| 4G/5G USB dongle | the built-in Wi-Fi card |
+| Ethernet cable or 4G dongle | the built-in Wi-Fi card |
+| Wi-Fi | a second AP-capable USB adapter, otherwise a free Ethernet port (wired sharing), otherwise none |
+| nothing yet (setup mode) | the built-in Wi-Fi card, until it is needed to join a network |
 
-A single Wi-Fi card cannot usually be a client and an access point at the same
-time, so a laptop with one card that is online over Wi-Fi needs the USB adapter
-from `HARDWARE.md` to share. The page tells you when that is the case.
-
-NetworkManager's shared mode does the DHCP (dnsmasq), DNS forwarding and NAT.
+NetworkManager's shared mode provides DHCP (dnsmasq), DNS forwarding and NAT.
 Hotspot clients get `10.42.0.x`; the stick is `10.42.0.1`.
 
-## Build the stick
+## What is in this folder
 
-You need a Linux machine (or Docker) and a stick of at least 8 GB.
+| Path | What it is |
+|------|------------|
+| `app/` | Connection manager web app (Flask): Wi-Fi scan/connect, captive-portal detection, hotspot, zero-touch provisioning, settings, QR codes, fleet client. |
+| `browser/browser.py` | Custom browser (PyQt6 / Qt WebEngine). Kiosk fullscreen, F11, HTML5 fullscreen, watchdog, scheduled reload, remote URL changes. |
+| `fleet/` | Fleet dashboard: one page listing every screen; change URL, rotation, reload interval, reboot; group updates. |
+| `system/`, `scripts/` | systemd units, polkit rules, NetworkManager config, the X session, `install-local.sh` for installing on an existing Debian machine. |
+| `build/` | `build-iso.sh` (live-build, native or Docker) and `make-usb.sh` (writes the ISO, adds persistence and config partitions). |
+| `config/usb-router.conf.example` | Every setting, with comments. |
+| `tests/` | pytest suite (22 tests) against a fake NetworkManager, plus the fleet dashboard. |
+| `HARDWARE.md` | Compute sticks, flash drives, adapters and power supplies to order. |
+
+## Build the sticks
+
+You need a Linux machine (or Docker) and flash drives of 8 GB or more.
 
 ```bash
-# 1. Build the ISO (20-60 min, ~6 GB scratch). Either:
+# 1. Build the ISO once (20-60 min, ~6 GB scratch)
 sudo apt install live-build && sudo ./build/build-iso.sh
-#    or, on any Linux with Docker:
+#    or on any Linux with Docker:
 ./build/build-iso.sh --docker
 
-# 2. Write it. THIS ERASES THE STICK. Find the device with lsblk first.
+# 2. Edit config/usb-router.conf.example (or a copy) with your Wi-Fi, URL and fleet settings.
+
+# 3. Write each stick. THIS ERASES THE STICK. Find the device with lsblk first.
 sudo ./build/make-usb.sh build/out/usb-router-YYYYMMDD.iso /dev/sdX
 ```
 
@@ -91,78 +112,82 @@ sudo ./build/make-usb.sh build/out/usb-router-YYYYMMDD.iso /dev/sdX
 | Partition | Label | Purpose |
 |---|---|---|
 | 1-2 | (ISO) | read-only live system |
-| 3 | `persistence` | ext4, saved Wi-Fi networks, settings, downloads |
-| 4 | `USBROUTER` | FAT32, `usb-router.conf`, visible on Windows and macOS |
+| 3 | `persistence` | ext4: saved Wi-Fi networks, settings, downloads |
+| 4 | `USBROUTER` | FAT32: `usb-router.conf`, visible on Windows and macOS |
 
-Edit `usb-router.conf` on the `USBROUTER` drive from any computer to change the
-home page, hotspot name and password, kiosk mode, and so on. Changes made on the
-connection page itself are saved to the persistence partition and win over the
-file.
+`make-usb.sh` copies `config/usb-router.conf.example` onto the `USBROUTER`
+partition as `usb-router.conf`, so edit that file before writing a batch, or
+edit it on each stick afterwards from any computer. For a per-screen ID set
+`device_id` on each stick; otherwise one is derived from the hardware.
 
-Then boot the target PC from USB (usually F12, F2, Esc or Del at power-on to
-pick the boot device; Secure Boot may need to be off for the live image).
+Boot the compute stick from USB (usually F7, F12, Esc or Del at power-on;
+Secure Boot off; "power on after power loss" on).
 
 ## Run it without a stick
 
-For development, or to make a mini-PC behave like the stick:
-
 ```bash
-# Web app only, with a fake NetworkManager (works on any OS with Python 3):
+# Web app only, with a fake NetworkManager (any OS with Python 3):
 pip install -r requirements-dev.txt
 USB_ROUTER_MOCK=1 python3 app/server.py          # http://127.0.0.1:8080
 
 # Browser against that page (needs PyQt6 + PyQt6-WebEngine):
 pip install -r requirements-browser.txt
-python3 browser/browser.py                       # or: browser/browser.py --kiosk
+python3 browser/browser.py                       # add --kiosk to test fullscreen
 
-# Full install on an existing Debian 12 / Ubuntu 22.04+ machine:
-sudo ./scripts/install-local.sh                  # add --no-x for the web app only
-```
+# Fleet dashboard:
+FLEET_TOKEN=secret FLEET_ADMIN_PASSWORD=pw python3 fleet/server.py   # http://127.0.0.1:4010
 
-Tests:
+# Full install on an existing Debian 12 / Ubuntu 22.04+ machine or mini-PC:
+sudo ./scripts/install-local.sh                  # --no-x for the web app only
 
-```bash
+# Tests:
 USB_ROUTER_MOCK=1 python3 -m pytest tests/
 ```
 
 ## Configuration
 
-All keys, with defaults, are in `config/usb-router.conf.example`. The ones
-people change:
+All keys are in `config/usb-router.conf.example`. The important ones:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `homepage` | `https://duckduckgo.com` | Page the browser opens when online |
-| `kiosk` | `false` | Fullscreen, no toolbar, once online. F11 or Esc reveals the toolbar |
-| `allow_exit` | `true` | Show the Quit button / allow Ctrl+Q |
-| `hotspot_enabled` | `true` | Start sharing automatically when online |
-| `hotspot_ssid` / `hotspot_password` | `USB-Router` / `changeme123` | Hotspot name and WPA2 password (8+ chars) |
-| `hotspot_band` | `bg` | `bg` = 2.4 GHz, `a` = 5 GHz |
-| `lan_access` | `false` | Also serve the page to hotspot clients on `http://10.42.0.1:8080` |
-| `admin_pin` | empty | Required (header `X-Admin-Pin`) for changes made from other devices when `lan_access` is on |
+| `homepage` | duckduckgo.com | Content URL. `{device_id}` and `{device_name}` are replaced |
+| `kiosk` | `true` | Fullscreen, no toolbar, once online |
+| `rotation` | `normal` | `left` / `right` for portrait screens, `inverted` |
+| `reload_every` | `0` | Reload the content every N minutes |
+| `device_id`, `device_name` | derived, empty | Identity in URLs and the dashboard |
+| `wifi_ssid[_2,_3]`, `wifi_password[_2,_3]` | empty | Zero-touch Wi-Fi profiles created at boot |
+| `setup_hotspot` | `true` | Broadcast the hotspot while offline for phone-based setup |
+| `hotspot_enabled`, `hotspot_ssid`, `hotspot_password`, `hotspot_band` | on, `USB-Router`, `changeme123`, `bg` | Sharing once online, and the name used in setup mode |
+| `lan_access`, `admin_pin` | `true`, empty | Serve the setup page to hotspot clients; PIN required for remote changes if set |
+| `fleet_url`, `fleet_token`, `fleet_interval` | empty, empty, 60 | Fleet dashboard |
+| `allow_exit` | `false` | Quit button / Ctrl+Q |
 
-Environment variables `USB_ROUTER_<KEY>` override the file, which is how the
-tests and the mock mode work.
+Environment variables `USB_ROUTER_<KEY>` override the file.
 
 ## API
 
-The browser and the page both use the same JSON API, so you can script it too.
+The browser, the page and the dashboard all use the same JSON API on port 8080.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/status` | Online state, uplink, devices, hotspot, settings in one call |
-| GET | `/api/wifi/scan?rescan=1` | Nearby networks (strongest BSSID per SSID) |
-| POST | `/api/wifi/connect` | `{ssid, password}` |
-| POST | `/api/wifi/forget` | `{ssid}` |
-| POST | `/api/disconnect` | `{iface}` |
-| POST | `/api/ethernet` | `{iface}` retry a wired connection |
+| GET | `/api/status` | Online state, uplink, devices, hotspot, settings, device, fleet, current URL |
+| GET | `/api/wifi/scan?rescan=1` | Nearby networks |
+| POST | `/api/wifi/connect`, `/api/wifi/forget` | `{ssid, password}` / `{ssid}` |
+| POST | `/api/disconnect`, `/api/ethernet` | `{iface}` |
 | GET | `/api/check` | Fresh internet / captive-portal check |
-| GET, POST | `/api/hotspot` | Status + candidate adapters; `{action: start/stop/restart, iface?}` |
+| GET, POST | `/api/hotspot` | Status and candidates; `{action: start/stop/restart, iface?}` |
 | GET, POST | `/api/settings` | Read / change settings |
-| POST | `/api/browser/go` | `{url?}` tell the browser to leave the connect screen |
-| GET | `/api/browser/poll` | What the browser polls every 2 s |
+| POST | `/api/system` | `{action: reload / restart-browser / reboot / shutdown}` |
+| POST | `/api/fleet/ping` | Send a heartbeat now |
+| GET | `/api/qr?kind=wifi` or `ui` | PNG QR codes for phone setup |
+| GET | `/api/display` | Rotation, used by the X session |
+| POST | `/api/browser/go` | `{url?}` leave the setup screen |
+| GET | `/api/browser/poll` | What the browser polls: navigate, action, homepage, kiosk, reload interval |
+| POST | `/api/browser/report` | `{url}` what the browser is showing |
 
-Everything that changes state is loopback-only unless `lan_access` is on.
+Changes from the local screen need nothing. Changes from the hotspot side are
+allowed when `lan_access` is on (the hotspot password is the gate) and require
+the `X-Admin-Pin` header when `admin_pin` is set.
 
 ## Browser keyboard shortcuts
 
@@ -170,9 +195,8 @@ Everything that changes state is loopback-only unless `lan_access` is on.
 |---|---|
 | F11 | Toggle fullscreen (also leaves kiosk mode) |
 | Esc | Leave HTML5 / window fullscreen, or stop loading |
-| Ctrl+L | Address bar |
-| Ctrl+T / Ctrl+W | New / close tab |
-| Ctrl+N | Connection page |
+| Ctrl+N | Setup page |
+| Ctrl+L, Ctrl+T, Ctrl+W | Address bar, new tab, close tab |
 | Ctrl+R, F5 | Reload |
 | Alt+Left / Alt+Right | Back / forward |
 | Ctrl+= / Ctrl+- / Ctrl+0 | Zoom |
@@ -181,23 +205,25 @@ Everything that changes state is loopback-only unless `lan_access` is on.
 
 ## Security notes
 
-- The web app runs as the unprivileged `kiosk` user. It talks to NetworkManager
-  over D-Bus; a polkit rule grants the `netdev` group that right, nothing else.
-- Change `hotspot_password` before handing a stick to anyone. The default is in
-  this README.
-- `lan_access` is off by default. Turn it on only with an `admin_pin` set.
+- The web app runs as the unprivileged `kiosk` user and controls NetworkManager
+  and reboot/power-off through polkit rules for the `netdev` group, nothing else.
+- Change `hotspot_password` before deploying. In setup mode it is shown on the
+  screen on purpose; it is what lets the installer's phone in.
+- Set `admin_pin` if screens will keep broadcasting a hotspot in public.
+- The fleet token is sent as a Bearer header; run the dashboard behind HTTPS.
 - The browser refuses to bypass TLS certificate errors.
-- The persistence partition is not encrypted. Wi-Fi passwords are stored on it
-  (by NetworkManager, root-readable only). Treat the stick like a laptop.
+- The persistence partition is not encrypted. Wi-Fi passwords are stored on it,
+  root-readable only. Treat a stick like a laptop.
 
 ## What was and was not verified
 
-- The web app and API were exercised end to end against the mock backend
-  (pytest, and a headless Chromium run through connect, hotspot and captive-portal
-  flows).
-- `browser/browser.py` compiles but needs a display and PyQt6 to run; it was
-  not run in this environment.
+- The web app, API and fleet dashboard were exercised end to end against the
+  mock backend (22 pytest tests) and through a headless Chromium run of the
+  setup, connect, hotspot and captive-portal flows.
+- `browser/browser.py` compiles but needs a display and PyQt6; it was not run here.
 - The ISO was not built here. `build-iso.sh` is a standard live-build recipe;
-  expect to iterate once on the first build (mirror hiccups, package renames).
+  expect one iteration on the first build.
+- The on-screen rotation and HDMI audio steps in `scripts/usb-router-session`
+  use standard `xrandr`/`pactl` calls and were not run on hardware.
 
 Part of [freebies](../README.md).

@@ -13,10 +13,10 @@ extension to get, and then have their clipboard read by it.
 
 ## Also in this repo
 
-- **[usb-router/](usb-router/)** — a bootable USB stick that turns any PC into an
-  internet router: a web page to pick Wi-Fi / Ethernet / 4G, automatic hotspot
-  sharing, and a custom fullscreen-capable browser. See its README and
-  HARDWARE.md for what to order.
+- **[usb-router/](usb-router/)** — a bootable USB stick that turns a HDMI compute
+  stick into a signage player with its own router: zero-touch or phone-based Wi-Fi
+  setup, fullscreen kiosk browser with watchdog, hotspot sharing, and a fleet
+  dashboard for the whole display network. See its README and HARDWARE.md.
 
 ## Run it
 

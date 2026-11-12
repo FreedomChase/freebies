@@ -102,3 +102,14 @@ code, kbd { background: var(--panel-2); border: 1px solid var(--line); padding: 
 .toast.bad { border-color: var(--bad); }
 .toast.ok { border-color: var(--ok); }
 @media (max-width: 640px) { :root { font-size: 16px; } .top, main, .foot { padding-left: 16px; padding-right: 16px; } .banner { flex-direction: column; align-items: stretch; } }
+
+.device-label { font-size: 0.8rem; font-weight: 500; color: var(--muted); margin-left: 8px; }
+.setup { display: flex; gap: 24px; align-items: center; justify-content: space-between; margin-bottom: 16px;
+  border-color: var(--accent); background: linear-gradient(180deg, rgba(79,140,255,.12), transparent 70%), var(--panel); }
+.setup h2 { font-size: 1.4rem; margin-bottom: 8px; }
+.setup ol { margin: 0; padding-left: 1.3em; font-size: 1.05rem; line-height: 1.6; }
+.qr-pair { display: flex; gap: 20px; flex-shrink: 0; }
+.qr-pair figure { margin: 0; text-align: center; color: var(--muted); font-size: 0.85rem; }
+.qr-pair img { display: block; background: #fff; border-radius: 10px; padding: 6px; width: 180px; height: 180px; margin-bottom: 6px; }
+.actions { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+@media (max-width: 900px) { .setup { flex-direction: column; align-items: stretch; } .qr-pair { justify-content: center; } }

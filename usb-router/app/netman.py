@@ -160,6 +160,14 @@ class NetworkManager:
     def wifi_connect(self, ssid, password=None, iface=None):
         if not ssid:
             raise NetError("No network name given")
+        # A single Wi-Fi card cannot run the setup hotspot and join a network at once:
+        # drop the hotspot first (the phone doing the setup will be disconnected).
+        hs = self.hotspot_status()
+        if hs["active"] and hs["mode"] == "wifi":
+            wifi = self.wifi_ifaces()
+            if (iface and hs["iface"] == iface) or len(wifi) <= 1:
+                self.hotspot_stop()
+                time.sleep(2)
         saved = {c["name"] for c in self.saved_connections()}
         args = []
         if ssid in saved and not password:
@@ -185,6 +193,20 @@ class NetworkManager:
 
     def wifi_forget(self, ssid):
         nmcli("connection", "delete", ssid)
+
+    def ensure_profile(self, ssid, password=None, priority=10):
+        """Create a saved, auto-connecting profile (zero-touch provisioning). No-op if it exists."""
+        if ssid in {c["name"] for c in self.saved_connections()}:
+            return False
+        args = ["connection", "add", "type", "wifi", "con-name", ssid, "ssid", ssid,
+                "connection.autoconnect", "yes", "connection.autoconnect-priority", str(priority)]
+        if password:
+            args += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
+        nmcli(*args)
+        return True
+
+    def wifi_ifaces(self):
+        return [d["iface"] for d in self.devices() if d["type"] == "wifi"]
 
     def disconnect(self, iface):
         nmcli("device", "disconnect", iface)
@@ -304,7 +326,7 @@ class MockNetworkManager:
         return devs
 
     def wifi_ap_capable(self, iface):
-        return iface == "wlan1"
+        return True  # both mock cards can run a hotspot; wlan1 is preferred when wlan0 is the uplink
 
     def wifi_scan(self, rescan=True):
         nets = [
@@ -324,6 +346,9 @@ class MockNetworkManager:
 
     def wifi_connect(self, ssid, password=None, iface=None):
         time.sleep(0.3)
+        # the mock's only client-capable card is wlan0, so a Wi-Fi hotspot always yields to a connection
+        if self.hotspot and self.hotspot["mode"] == "wifi" and iface in (None, self.hotspot["iface"]):
+            self.hotspot = None
         if ssid == "Neighbour" and password != "letmein12":
             raise NetError("Wrong password or the network rejected the connection")
         if ssid in ("Home WiFi", "Neighbour") and not password and ssid not in self.saved:
@@ -335,6 +360,16 @@ class MockNetworkManager:
         self.saved.discard(ssid)
         if self.connected_ssid == ssid:
             self.connected_ssid = None
+
+    def ensure_profile(self, ssid, password=None, priority=10):
+        if ssid in self.saved:
+            return False
+        self.saved.add(ssid)
+        self.provisioned = getattr(self, "provisioned", []) + [ssid]
+        return True
+
+    def wifi_ifaces(self):
+        return [d["iface"] for d in self.devices() if d["type"] == "wifi"]
 
     def disconnect(self, iface):
         if iface == "wlan0":
