@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Minimal Openbox config for the USB Router kiosk: one desktop, no menus, keep windows maximised. -->
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <focus><focusNew>yes</focusNew><followMouse>no</followMouse></focus>
+  <placement><policy>Smart</policy><center>yes</center></placement>
+  <theme><name>Clearlooks</name><titleLayout>NLC</titleLayout><keepBorder>no</keepBorder></theme>
+  <desktops><number>1</number></desktops>
+  <keyboard>
+    <keybind key="C-A-t"><action name="Execute"><command>x-terminal-emulator</command></action></keybind>
+  </keyboard>
+  <mouse><dragThreshold>8</dragThreshold></mouse>
+  <applications>
+    <application class="*"><maximized>yes</maximized><decor>no</decor></application>
+  </applications>
+</openbox_config>

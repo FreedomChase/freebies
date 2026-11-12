@@ -1,0 +1,12 @@
+[Unit]
+Description=USB Router settings partition (FAT, label USBROUTER)
+ConditionPathExists=/dev/disk/by-label/USBROUTER
+
+[Mount]
+What=/dev/disk/by-label/USBROUTER
+Where=/config
+Type=vfat
+Options=uid=1000,gid=1000,umask=002,flush,nofail
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+# Builder image for the USB Router ISO. Run with --privileged (live-build needs chroot + loop devices).
+FROM debian:bookworm
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      live-build debootstrap squashfs-tools xorriso syslinux syslinux-common isolinux \
+      grub-efi-amd64-bin grub-pc-bin mtools dosfstools ca-certificates curl gnupg \
+      debian-archive-keyring parted util-linux \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /src

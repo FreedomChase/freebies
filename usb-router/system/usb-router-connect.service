@@ -1,0 +1,24 @@
+[Unit]
+Description=USB Router connection manager (web UI + hotspot keeper)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+User=kiosk
+Group=netdev
+Environment=PYTHONUNBUFFERED=1
+Environment=USB_ROUTER_STATE_DIR=/var/lib/usb-router
+ExecStartPre=+/bin/mkdir -p /var/lib/usb-router
+ExecStartPre=+/bin/chown kiosk:netdev /var/lib/usb-router
+ExecStart=/usr/bin/python3 /opt/usb-router/app/server.py
+Restart=always
+RestartSec=2
+# hardening: the service only needs to talk to NetworkManager over D-Bus
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/usb-router
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

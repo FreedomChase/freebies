@@ -1,0 +1,8 @@
+// Let the kiosk user (group netdev) control NetworkManager without a password:
+// scan, connect, create the hotspot profile, enable/disable networking.
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") === 0 &&
+        subject.isInGroup("netdev")) {
+        return polkit.Result.YES;
+    }
+});

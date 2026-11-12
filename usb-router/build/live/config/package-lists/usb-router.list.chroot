@@ -1,0 +1,55 @@
+# --- base / boot
+live-boot
+live-config
+live-config-systemd
+systemd-sysv
+sudo
+console-setup
+keyboard-configuration
+locales
+# --- networking (router)
+network-manager
+dnsmasq-base
+nftables
+iw
+wireless-regdb
+rfkill
+modemmanager
+usb-modeswitch
+mobile-broadband-provider-info
+ethtool
+curl
+iputils-ping
+# --- firmware (needs archive areas: non-free non-free-firmware)
+firmware-linux
+firmware-linux-nonfree
+firmware-misc-nonfree
+firmware-iwlwifi
+firmware-realtek
+firmware-atheros
+firmware-brcm80211
+firmware-intel-sound
+atmel-firmware
+# --- graphics / kiosk session
+xserver-xorg
+xserver-xorg-video-all
+xserver-xorg-input-all
+xinit
+x11-xserver-utils
+openbox
+unclutter-xfixes
+xterm
+fonts-dejavu
+fonts-noto-core
+fonts-noto-color-emoji
+# --- the app
+python3
+python3-flask
+python3-pyqt6
+python3-pyqt6.qtwebengine
+# --- media in the browser
+gstreamer1.0-plugins-good
+gstreamer1.0-libav
+libavcodec-extra
+pulseaudio
+alsa-utils

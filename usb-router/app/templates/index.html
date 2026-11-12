@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>USB Router</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-mock="{{ 'true' if mock else 'false' }}">
+
+<header class="top">
+  <div class="brand">
+    <span class="logo" aria-hidden="true"></span>
+    <div>
+      <h1>USB Router</h1>
+      <p class="sub">Connect this computer to the internet, then share it.</p>
+    </div>
+  </div>
+  <div id="status-pill" class="pill pill-offline" role="status" aria-live="polite">
+    <span class="dot"></span><span id="status-text">Checking…</span>
+  </div>
+</header>
+
+<main>
+  <!-- Captive portal banner -->
+  <section id="portal-banner" class="banner hidden">
+    <div>
+      <strong>This network wants you to sign in first.</strong>
+      <p>Hotels, cafés and airports show a login page before letting you online.</p>
+    </div>
+    <button id="portal-open" class="btn btn-primary">Open the sign-in page</button>
+  </section>
+
+  <!-- Online hand-off -->
+  <section id="online-card" class="card hero hidden">
+    <h2>You're online</h2>
+    <p id="online-detail"></p>
+    <div class="row">
+      <button id="go-browse" class="btn btn-primary btn-big">Start browsing</button>
+      <input id="go-url" class="input grow" type="url" placeholder="or type a web address…" spellcheck="false">
+    </div>
+  </section>
+
+  <div class="grid">
+    <!-- Wi-Fi -->
+    <section class="card" id="wifi-card">
+      <div class="card-head">
+        <h2>Wi-Fi</h2>
+        <button id="wifi-rescan" class="btn btn-ghost" title="Scan again">Rescan</button>
+      </div>
+      <ul id="wifi-list" class="list" aria-label="Nearby Wi-Fi networks">
+        <li class="muted">Scanning for networks…</li>
+      </ul>
+
+      <form id="wifi-form" class="connect-form hidden" autocomplete="off">
+        <div class="form-title">Connect to <strong id="wifi-form-ssid"></strong></div>
+        <div class="row">
+          <input id="wifi-password" class="input grow" type="password" placeholder="Wi-Fi password" minlength="8" autocapitalize="off">
+          <button type="button" id="wifi-show" class="btn btn-ghost" aria-label="Show password">Show</button>
+        </div>
+        <div class="row">
+          <button type="submit" class="btn btn-primary">Connect</button>
+          <button type="button" id="wifi-cancel" class="btn">Cancel</button>
+          <button type="button" id="wifi-forget" class="btn btn-danger hidden">Forget</button>
+        </div>
+        <p id="wifi-error" class="error" role="alert"></p>
+      </form>
+
+      <details class="hidden-ssid">
+        <summary>Join a hidden network</summary>
+        <form id="hidden-form" class="row" autocomplete="off">
+          <input id="hidden-ssid" class="input grow" type="text" placeholder="Network name" required>
+          <input id="hidden-pass" class="input grow" type="password" placeholder="Password (blank if open)">
+          <button class="btn">Join</button>
+        </form>
+      </details>
+    </section>
+
+    <!-- Wired / other -->
+    <section class="card" id="devices-card">
+      <div class="card-head"><h2>Adapters</h2></div>
+      <ul id="device-list" class="list"></ul>
+      <p class="hint">Plug in an Ethernet cable or a 4G USB dongle and it will be used automatically.</p>
+    </section>
+
+    <!-- Hotspot -->
+    <section class="card" id="hotspot-card">
+      <div class="card-head">
+        <h2>Share the connection</h2>
+        <label class="switch" title="Share automatically when online">
+          <input type="checkbox" id="hotspot-enabled"><span class="slider"></span>
+        </label>
+      </div>
+      <div id="hotspot-status" class="hotspot-status muted">Not sharing.</div>
+      <div class="row wrap">
+        <label class="field"><span>Network name</span>
+          <input id="hs-ssid" class="input" type="text" maxlength="32"></label>
+        <label class="field"><span>Password</span>
+          <input id="hs-pass" class="input" type="text" minlength="8" maxlength="63"></label>
+        <label class="field"><span>Band</span>
+          <select id="hs-band" class="input">
+            <option value="bg">2.4 GHz (most compatible)</option>
+            <option value="a">5 GHz (faster)</option>
+          </select></label>
+      </div>
+      <div class="row wrap">
+        <label class="field"><span>Share using</span>
+          <select id="hs-iface" class="input"><option value="">Automatic</option></select></label>
+        <div class="row align-end">
+          <button id="hs-apply" class="btn">Save</button>
+          <button id="hs-start" class="btn btn-primary">Start sharing</button>
+          <button id="hs-stop" class="btn btn-danger hidden">Stop</button>
+        </div>
+      </div>
+      <ul id="hs-clients" class="list compact"></ul>
+      <p id="hs-error" class="error" role="alert"></p>
+    </section>
+
+    <!-- Browser settings -->
+    <section class="card" id="settings-card">
+      <div class="card-head"><h2>Browser</h2></div>
+      <label class="field"><span>Home page</span>
+        <input id="set-homepage" class="input" type="text" placeholder="https://…"></label>
+      <label class="check"><input type="checkbox" id="set-kiosk"> Fullscreen kiosk mode when online (no address bar, press F11 to leave)</label>
+      <label class="check"><input type="checkbox" id="set-exit"> Allow quitting the browser</label>
+      <div class="row"><button id="set-save" class="btn">Save</button><span id="set-msg" class="muted"></span></div>
+      <p class="hint">Tip: these can also be set in <code>usb-router.conf</code> on the stick's <code>USBROUTER</code> drive.</p>
+    </section>
+  </div>
+</main>
+
+<footer class="foot">
+  <span id="backend-note"></span>
+  <span>Keyboard: <kbd>F11</kbd> fullscreen · <kbd>Ctrl</kbd>+<kbd>L</kbd> address bar · <kbd>Ctrl</kbd>+<kbd>N</kbd> network screen</span>
+</footer>
+
+<div id="toast" class="toast hidden" role="status"></div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

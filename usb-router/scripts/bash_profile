@@ -1,0 +1,5 @@
+# Installed as /home/kiosk/.bash_profile on the stick.
+# live-config logs the kiosk user in on tty1; start X there and nowhere else.
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+  exec startx /opt/usb-router/scripts/usb-router-session -- -nocursor vt1 >/tmp/xsession.log 2>&1
+fi

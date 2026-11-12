@@ -1,0 +1,7 @@
+build/work/
+build/out/
+*.iso
+*.iso.sha256
+__pycache__/
+*.pyc
+.pytest_cache/

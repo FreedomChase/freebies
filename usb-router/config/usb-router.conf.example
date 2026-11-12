@@ -1,0 +1,35 @@
+# USB Router configuration
+#
+# Copy this file to the USBROUTER drive on the stick as "usb-router.conf"
+# (it is a normal FAT drive, so you can edit it from Windows or macOS), or to
+# /etc/usb-router/usb-router.conf inside the image. Settings changed from the
+# web page are saved on the stick and override the values here.
+
+[usb-router]
+# Page the browser opens once the computer is online.
+homepage = https://duckduckgo.com
+
+# true  = once online, the browser goes fullscreen with no address bar
+#         (F11 or Esc brings the address bar back; Ctrl+N opens the network screen)
+# false = a normal browser window with tabs; F11 toggles fullscreen
+kiosk = false
+
+# Allow the Quit button / Ctrl+Q in the browser.
+allow_exit = true
+
+# Share the internet connection automatically once online.
+hotspot_enabled = true
+hotspot_ssid = USB-Router
+hotspot_password = changeme123
+# bg = 2.4 GHz (works with every device), a = 5 GHz (faster, shorter range)
+hotspot_band = bg
+
+# Serve the web page to devices on the hotspot too (http://10.42.0.1:8080).
+# When enabled, set an admin PIN; it is required for any change made from
+# another device. The screen attached to the stick never needs the PIN.
+lan_access = false
+admin_pin =
+
+# How we decide we are really online (a 204 means no login page is in the way).
+check_url = http://connectivitycheck.gstatic.com/generate_204
+check_fallback_url = http://detectportal.firefox.com/success.txt

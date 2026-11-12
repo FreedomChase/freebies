@@ -1,0 +1,34 @@
+#!/bin/sh
+# X session for the kiosk user: window manager + the custom browser.
+# Started from ~/.xinitrc, which is started by ~/.bash_profile on tty1.
+
+export QT_QPA_PLATFORM=xcb
+export QT_AUTO_SCREEN_SCALE_FACTOR=1
+export XDG_CURRENT_DESKTOP=usb-router
+
+xset s off -dpms          # never blank the screen
+xset s noblank
+xsetroot -solid "#0e1116" 2>/dev/null
+command -v unclutter >/dev/null && unclutter --timeout 3 --fork 2>/dev/null
+
+openbox --config-file /opt/usb-router/scripts/openbox-rc.xml &
+WM=$!
+
+# Wait for the connection manager to come up (systemd starts it in parallel).
+for i in $(seq 1 30); do
+  if curl -fs http://127.0.0.1:8080/healthz >/dev/null 2>&1; then break; fi
+  sleep 1
+done
+
+EXTRA=""
+[ -f /config/kiosk ] && EXTRA="--kiosk"
+
+# If the browser crashes or is quit, bring it back.
+while :; do
+  python3 /opt/usb-router/browser/browser.py $EXTRA
+  code=$?
+  [ "$code" -eq 0 ] && [ -f /var/lib/usb-router/exit-to-shell ] && break
+  sleep 1
+done
+
+kill $WM 2>/dev/null

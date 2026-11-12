@@ -1,0 +1,2 @@
+# Connection manager (web UI). On the stick this comes from apt: python3-flask
+flask>=3.0.0

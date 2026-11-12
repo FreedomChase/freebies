@@ -1,0 +1,33 @@
+#!/bin/sh
+# Runs inside the chroot while the ISO is built. Files were placed by build-iso.sh.
+set -e
+
+echo "usb-router: wiring up services"
+chmod +x /opt/usb-router/scripts/usb-router-session /opt/usb-router/browser/browser.py /opt/usb-router/app/server.py
+
+# default config lives in the image; the FAT partition on the stick overrides it
+install -d /etc/usb-router /var/lib/usb-router /config
+[ -f /etc/usb-router/usb-router.conf ] || cp /opt/usb-router/config/usb-router.conf.example /etc/usb-router/usb-router.conf
+
+# kiosk user is created at boot by live-config (uid 1000); pre-seed its home via /etc/skel
+install -m 644 /opt/usb-router/scripts/bash_profile /etc/skel/.bash_profile
+install -d -m 755 /etc/skel/Downloads
+
+# systemd units / polkit / NetworkManager config
+install -m 644 /opt/usb-router/system/usb-router-connect.service /etc/systemd/system/
+install -m 644 /opt/usb-router/system/config.mount /etc/systemd/system/
+install -m 644 /opt/usb-router/system/50-usb-router-networkmanager.rules /etc/polkit-1/rules.d/
+install -m 644 /opt/usb-router/system/usb-router-networkmanager.conf /etc/NetworkManager/conf.d/usb-router.conf
+
+systemctl enable NetworkManager.service
+systemctl enable usb-router-connect.service
+systemctl enable config.mount
+systemctl set-default multi-user.target        # X is started by the kiosk login, not a display manager
+systemctl disable systemd-networkd.service 2>/dev/null || true
+
+# the service runs as uid 1000 (kiosk); make sure the group exists before first boot
+getent group netdev >/dev/null || groupadd -r netdev
+chown -R 1000:1000 /var/lib/usb-router || true
+
+# leave Wi-Fi regulatory domain unset (00 = world); users can change it in the UI later
+echo "usb-router: hook done"

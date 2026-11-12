@@ -1,0 +1,4 @@
+# Custom browser. On the stick this comes from apt:
+#   python3-pyqt6 python3-pyqt6.qtwebengine
+PyQt6>=6.5
+PyQt6-WebEngine>=6.5
