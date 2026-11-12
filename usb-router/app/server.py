@@ -145,6 +145,39 @@ def _is_local():
         return False
 
 
+def host_allowed(host):
+    """
+    DNS rebinding guard (S&D #183). The kiosk browser shows third-party pages; one of them can
+    re-resolve its own domain to 127.0.0.1 and then read this UI (which shows the admin PIN to the
+    screen) as same-origin. Its requests come from 127.0.0.1, so only the Host header still names
+    the attacker. Every real client reaches this server by an IP address (127.0.0.1 for the screen,
+    10.42.0.1 for phones on the hotspot, the LAN address with lan_access) or by localhost; a
+    rebinding attack needs a DNS name. So: allow localhost and IP literals, refuse every other name.
+    """
+    host = (host or "").strip().lower()
+    if not host:
+        return False
+    if host.startswith("["):                     # [IPv6] or [IPv6]:port
+        name = host[1:host.find("]")] if "]" in host else ""
+    else:
+        name = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+    if name == "localhost":
+        return True
+    try:
+        ipaddress.ip_address(name)
+        return True
+    except ValueError:
+        return False
+
+
+@app.before_request
+def refuse_foreign_host():
+    if not host_allowed(request.headers.get("Host")):
+        log.warning("refused request for Host %r from %s (DNS rebinding guard)",
+                    (request.headers.get("Host") or "")[:100], request.remote_addr)
+        abort(403)
+
+
 # Brute-force protection for the PIN: per-address failure count with escalating lockout.
 _pin_failures = {}
 _pin_lock = threading.Lock()

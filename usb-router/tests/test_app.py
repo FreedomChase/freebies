@@ -501,3 +501,36 @@ def test_no_default_secrets_in_code_or_docs():
     example = open(os.path.join(root, "config", "usb-router.conf.example"), encoding="utf-8").read()
     for key in ("hotspot_password", "admin_pin", "fleet_token", "wifi_password"):
         assert any(line.strip() == f"{key} =" for line in example.splitlines()), key
+
+
+# --- S&D #183: DNS rebinding. A page on the kiosk (attacker.example, re-resolved to 127.0.0.1) reaches this server
+# from 127.0.0.1, so _is_local() is true; only the Host header still names the attacker's domain.
+REBIND = {"REMOTE_ADDR": "127.0.0.1"}
+
+
+@pytest.mark.parametrize("host", ["attacker.example", "attacker.example:8080", "127.0.0.1.attacker.example:8080",
+                                  "localhost.attacker.example", "10.42.0.1.nip.io:8080", ""])
+def test_rebinding_host_cannot_read_the_pin(client, host):
+    for path in ("/api/settings", "/api/status", "/"):
+        r = client.get(path, headers={"Host": host}, environ_base=REBIND)
+        assert r.status_code == 403, (host, path, r.status_code)
+        assert cfg_pin(client) not in r.get_data(as_text=True)
+
+
+def test_rebinding_host_cannot_change_settings_even_with_the_pin(client):
+    r = client.post("/api/settings", json={"homepage": "https://evil.example"}, environ_base=REBIND,
+                    headers={"Host": "attacker.example:8080", "X-Admin-Pin": cfg_pin(client)})
+    assert r.status_code == 403
+    assert client.get("/api/settings", environ_base=REBIND).get_json()["settings"]["homepage"] != "https://evil.example"
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8080", "127.0.0.1", "localhost:8080", "localhost", "LOCALHOST:8080",
+                                  "10.42.0.1:8080", "192.168.1.50:8080", "[::1]:8080", "[::1]"])
+def test_screen_hotspot_and_lan_hosts_still_work(client, host):
+    r = client.get("/api/settings", headers={"Host": host}, environ_base=REBIND)
+    assert r.status_code == 200, (host, r.status_code)
+    assert client.get("/healthz", headers={"Host": host}).status_code == 200
+
+
+def cfg_pin(client):
+    return client.server.cfg.admin_pin()
