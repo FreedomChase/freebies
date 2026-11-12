@@ -409,6 +409,36 @@ def test_setup_hotspot_off_once_online(client):
     assert rt.desired(online=True) == "share"
 
 
+def test_hotspot_left_up_across_app_restart_is_switched_off_once_online(client):
+    """dev3's gap on #180: the app restarts while NetworkManager keeps the setup hotspot up."""
+    srv, rt = client.server, client.server.router
+    rt.booted -= 60
+    srv.nm.saved.clear()
+    srv.nm.hotspot_start("wlan0", "USB-Router", "testpass123", "bg")   # up, but not started by this process
+    assert rt.role is None and srv.nm.hotspot_status()["active"] is True
+    # still offline and unconfigured: the adopted hotspot stays up for phone setup
+    assert rt.tick(online=False) == "noop"
+    assert rt.role == "setup" and srv.nm.hotspot_status()["active"] is True
+    # online: it goes away, as a hotspot this process started would
+    assert rt.tick(online=True) == "stopped-setup"
+    assert srv.nm.hotspot_status()["active"] is False
+    assert rt.tick(online=True) == "noop"
+
+
+def test_hotspot_left_up_while_sharing_is_kept_after_app_restart(client):
+    srv, rt = client.server, client.server.router
+    rt.booted -= 60
+    client.post("/api/settings", json={"hotspot_enabled": True})
+    srv.nm.hotspot_start("wlan1", "USB-Router", "testpass123", "bg")
+    assert rt.role is None
+    assert rt.tick(online=True) == "noop"
+    assert rt.role == "share" and srv.nm.hotspot_status()["active"] is True
+    # sharing switched off -> the adopted hotspot stops (the settings route or the next tick)
+    client.post("/api/settings", json={"hotspot_enabled": False})
+    rt.tick(online=True)
+    assert srv.nm.hotspot_status()["active"] is False
+
+
 def test_setup_hotspot_only_when_unconfigured_or_requested(client):
     srv, rt = client.server, client.server.router
     rt.booted -= 60

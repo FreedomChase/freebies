@@ -114,6 +114,13 @@ class Router:
         """One keeper step. Returns the action taken (for tests/logging)."""
         want = self.desired(online)
         active = self.nm.hotspot_status()["active"]
+        if active and self.role is None:
+            # Up before this process started: the app restarted or crashed while
+            # NetworkManager kept the hotspot running, so nobody here knows why it is up.
+            # Adopt it as the keeper's own (share if sharing is wanted now, otherwise
+            # setup), so the rules below still switch it off once the screen is online.
+            self.role = "share" if want == "share" else "setup"
+            log.info("adopted a hotspot that was already up (role=%s)", self.role)
         if want in ("share", "setup") and not active:
             try:
                 self.start(role=want)
