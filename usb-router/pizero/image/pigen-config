@@ -1,0 +1,18 @@
+# pi-gen config for the USB Router signage player (Pi Zero W, Raspberry Pi OS Lite 32-bit).
+# build-image.sh copies this to pi-gen's ./config and fills @PASS@ with a random
+# password that is never stored; 00-install/00-run.sh then locks the account.
+IMG_NAME=usbrouter-pizerow
+RELEASE=bookworm
+TARGET_HOSTNAME=usb-router
+FIRST_USER_NAME=builder
+FIRST_USER_PASS=@PASS@
+DISABLE_FIRST_BOOT_USER_RENAME=1
+ENABLE_SSH=0
+# Wi-Fi stays blocked on Raspberry Pi OS until a country is set
+WPA_COUNTRY=ES
+LOCALE_DEFAULT=en_GB.UTF-8
+KEYBOARD_KEYMAP=gb
+KEYBOARD_LAYOUT="English (UK)"
+TIMEZONE_DEFAULT=Europe/Madrid
+DEPLOY_COMPRESSION=xz
+STAGE_LIST="stage0 stage1 stage2 stage-usbrouter"
