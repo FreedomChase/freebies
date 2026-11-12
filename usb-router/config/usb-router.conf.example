@@ -42,29 +42,40 @@ wifi_ssid_3 =
 wifi_password_3 =
 
 # ----------------------------------------------------- phone-based setup ---
-# While the screen is offline it broadcasts the hotspot below so you can set it
-# up from a phone: join the Wi-Fi, open http://10.42.0.1:8080, pick the venue's
-# network. QR codes for both steps are shown on the screen.
+# While the screen is offline AND has no Wi-Fi configured yet, it broadcasts
+# the hotspot below so you can set it up from a phone: join the Wi-Fi, open
+# http://10.42.0.1:8080, pick the venue's network, type the admin PIN. QR codes,
+# the password and the PIN are shown on the screen itself only. The hotspot
+# switches off as soon as the screen is online; Ctrl+N on a keyboard (or the
+# "Allow phone setup" button on the screen) brings it back for 15 minutes.
 setup_hotspot = true
 
+# ------------------------------------------------------------ secrets -------
+# Leave both blank: each stick generates its own random hotspot password and
+# 6-digit admin PIN at first boot and shows them on its screen. Set them only
+# if you want the same values on every stick. Common defaults (changeme...,
+# password, 12345678) are refused and replaced by a generated one.
+hotspot_password =
+admin_pin =
+
 # ------------------------------------------------------------ sharing -------
-# Once online, share the connection out of a spare adapter (second Wi-Fi card
-# or Ethernet port) so nearby devices can use it.
-hotspot_enabled = true
+# Share the internet connection with nearby devices once online (opt-in).
+# Needs a spare adapter: a second Wi-Fi card or an Ethernet port.
+hotspot_enabled = false
 hotspot_ssid = USB-Router
-hotspot_password = changeme123
 # bg = 2.4 GHz (works with every phone), a = 5 GHz
 hotspot_band = bg
 
-# Serve this page to devices on the hotspot too. Needed for phone-based setup.
-# The admin PIN is required for changes made from another device (sent as the
-# X-Admin-Pin header; the on-screen page never needs it).
+# Serve this page to devices on the hotspot too (needed for phone-based setup).
+# Every change made from another device needs the admin PIN (X-Admin-Pin).
 lan_access = true
-admin_pin =
 
 # ------------------------------------------------------ display network -----
 # Optional central dashboard (see fleet/). Screens report in every
 # fleet_interval seconds and pick up URL / rotation / reboot changes.
+# The screen refuses to contact a dashboard without a token. Generate one with
+#   openssl rand -hex 16
+# and use the same value as FLEET_TOKEN on the dashboard.
 fleet_url =
 fleet_token =
 fleet_interval = 60

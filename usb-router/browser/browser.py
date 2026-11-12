@@ -287,7 +287,9 @@ class Browser(QMainWindow):
         self.current().setFocus()
 
     def show_network(self):
-        """Ctrl+N: bring up the connection manager in a tab (always allowed, even in kiosk)."""
+        """Ctrl+N: bring up the setup page (always allowed, even in kiosk) and re-open phone
+        setup mode, so the setup hotspot comes back if the screen is offline."""
+        fetch_json(self.args.connect_url.rstrip("/") + "/api/setup-mode", data={"action": "open"})
         for i in range(self.tabs.count()):
             if self.tabs.widget(i).url().toString().startswith(self.args.connect_url):
                 self.tabs.setCurrentIndex(i)

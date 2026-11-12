@@ -29,11 +29,13 @@
       <ol>
         <li>Join the Wi-Fi network <strong id="setup-ssid"></strong> with password <strong id="setup-pass"></strong></li>
         <li>Open <strong id="setup-url"></strong> on your phone</li>
-        <li>Pick the venue's Wi-Fi and enter its password. The screen connects and starts on its own.</li>
+        <li>Pick the venue's Wi-Fi and enter its password. When asked, type the admin PIN <strong id="setup-pin"></strong>.</li>
+        <li>The screen connects, stops broadcasting, and shows its content.</li>
       </ol>
       <p class="hint">Screen ID <code id="setup-id"></code>. Or plug in a keyboard and use this page directly.</p>
+      <p id="setup-phone-note" class="hint hidden">You are on the phone side. The password and PIN are printed on the screen itself, not here.</p>
     </div>
-    <div class="qr-pair">
+    <div class="qr-pair" id="qr-wrap">
       <figure><img id="qr-wifi" alt="QR code to join the setup Wi-Fi" width="180" height="180"><figcaption>1. Join Wi-Fi</figcaption></figure>
       <figure><img id="qr-ui" alt="QR code for the setup page" width="180" height="180"><figcaption>2. Open setup page</figcaption></figure>
     </div>
@@ -105,7 +107,7 @@
     <section class="card" id="hotspot-card">
       <div class="card-head">
         <h2>Share the connection</h2>
-        <label class="switch" title="Share automatically when online">
+        <label class="switch" title="Share the internet connection with nearby devices once online">
           <input type="checkbox" id="hotspot-enabled"><span class="slider"></span>
         </label>
       </div>
@@ -113,7 +115,7 @@
       <div class="row wrap">
         <label class="field"><span>Network name</span>
           <input id="hs-ssid" class="input" type="text" maxlength="32"></label>
-        <label class="field"><span>Password</span>
+        <label class="field"><span>Password <em id="hs-pass-source" class="muted"></em></span>
           <input id="hs-pass" class="input" type="text" minlength="8" maxlength="63"></label>
         <label class="field"><span>Band</span>
           <select id="hs-band" class="input">
@@ -133,6 +135,20 @@
       </div>
       <ul id="hs-clients" class="list compact"></ul>
       <p id="hs-error" class="error" role="alert"></p>
+    </section>
+
+    <!-- Admin PIN: only rendered for the physical screen (server sends it to loopback only) -->
+    <section class="card pin hidden" id="pin-card">
+      <div class="card-head"><h2>Admin PIN</h2><span class="tag" id="pin-source"></span></div>
+      <div class="pin-value" id="pin-value"></div>
+      <p class="hint">Every change to this screen, from here or from a phone on its hotspot, needs this PIN. It is only ever shown on this screen.</p>
+      <p id="setup-window-note" class="muted"></p>
+      <div class="row wrap">
+        <button id="setup-open" class="btn">Allow phone setup for 15 min</button>
+        <button id="setup-close" class="btn hidden">Stop phone setup</button>
+        <button class="btn" data-rotate="admin_pin">New PIN</button>
+        <button class="btn" data-rotate="hotspot_password">New hotspot password</button>
+      </div>
     </section>
 
     <!-- Screen / content settings -->

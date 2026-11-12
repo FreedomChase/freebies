@@ -10,9 +10,9 @@ screen can be set up from a phone, or pre-configured so nobody touches it at all
 - **Shows your content** in a custom Chromium-based browser: fullscreen kiosk,
   per-screen URLs, portrait rotation, a watchdog that retries when the content
   server is down, and scheduled reloads.
-- **Routes**: once online it can share the connection as a Wi-Fi hotspot or
-  over Ethernet, and while offline it broadcasts a setup hotspot so a phone can
-  configure it.
+- **Routes**: while offline and unconfigured it broadcasts a setup hotspot so
+  a phone can configure it; once online that hotspot switches off. Sharing the
+  connection to nearby devices is a separate, opt-in setting.
 - **Reports in** to a small fleet dashboard (included) where you see every
   screen and change its URL, rotation or reboot it remotely.
 
@@ -31,25 +31,28 @@ venue Wi-Fi and the content URL in `usb-router.conf`:
 ```ini
 homepage = https://signage.example.com/play?screen={device_id}
 wifi_ssid = Venue-Staff
-wifi_password = ********
+wifi_password = <the venue's Wi-Fi password>
 fleet_url = https://signage.example.com
-fleet_token = ********
+fleet_token = <output of: openssl rand -hex 16, same as FLEET_TOKEN on the dashboard>
 ```
 
 Plug in, power on, done. The screen joins the Wi-Fi, opens the URL with its own
 ID filled in, and appears in the dashboard where you can name it and change
 what it shows.
 
-**2. From a phone (screen mounted, no keyboard).** With nothing pre-configured
+**2. From a phone (screen mounted, no keyboard).** With no Wi-Fi configured
 the screen shows two QR codes after about 25 seconds offline: scan the first to
 join its setup hotspot, the second to open its setup page. Pick the venue Wi-Fi,
-type the password, and the screen connects and starts. The hotspot drops when
-the screen's single Wi-Fi card switches over; that is expected.
+type its password and, when asked, the 6-digit admin PIN printed on the screen.
+The screen connects, the setup hotspot switches off, and the content starts.
+The hotspot password and PIN are unique to each stick, generated at first boot,
+and shown only on the screen itself.
 
 ![Phone-based setup screen with QR codes](docs/setup-page.png)
 
 **3. With a keyboard.** The same setup page is on the screen itself. Ctrl+N
-brings it back any time; F11 toggles fullscreen.
+brings it back any time and re-allows phone setup for 15 minutes if the screen
+is offline; F11 toggles fullscreen.
 
 ## What happens at boot
 
@@ -59,21 +62,21 @@ brings it back any time; F11 toggles fullscreen.
    and creates auto-connect profiles for the `wifi_ssid*` entries in the config.
 3. The `kiosk` user logs in on tty1, X starts, rotation and HDMI audio are set,
    and the browser opens the setup page with no toolbar.
-4. Offline for 25 s with `setup_hotspot = true`: the setup hotspot and QR codes appear.
-5. Online: the browser goes fullscreen on the content URL (`kiosk = true`), the
-   sharing hotspot starts if a spare adapter exists, and heartbeats go to the
-   fleet dashboard if configured.
+4. Offline for 25 s with no Wi-Fi configured: the setup hotspot and QR codes appear.
+5. Online: the setup hotspot switches off, the browser goes fullscreen on the
+   content URL (`kiosk = true`), heartbeats go to the fleet dashboard if a URL
+   and token are set, and the sharing hotspot starts only if `hotspot_enabled`.
 6. Content server down? The browser shows a "Content unavailable, retrying"
    screen with the screen ID and retries with backoff. Network back? It reloads.
 7. Saved networks, settings and downloads persist on the stick.
 
 ### Which adapter becomes the hotspot
 
-| Internet comes from | Hotspot runs on |
+| Internet comes from | Hotspot runs on (sharing is opt-in: `hotspot_enabled = true`) |
 |---|---|
 | Ethernet cable or 4G dongle | the built-in Wi-Fi card |
 | Wi-Fi | a second AP-capable USB adapter, otherwise a free Ethernet port (wired sharing), otherwise none |
-| nothing yet (setup mode) | the built-in Wi-Fi card, until it is needed to join a network |
+| nothing yet (setup mode, unconfigured screen) | the built-in Wi-Fi card, until it is needed to join a network |
 
 NetworkManager's shared mode provides DHCP (dnsmasq), DNS forwarding and NAT.
 Hotspot clients get `10.42.0.x`; the stick is `10.42.0.1`.
@@ -88,7 +91,7 @@ Hotspot clients get `10.42.0.x`; the stick is `10.42.0.1`.
 | `system/`, `scripts/` | systemd units, polkit rules, NetworkManager config, the X session, `install-local.sh` for installing on an existing Debian machine. |
 | `build/` | `build-iso.sh` (live-build, native or Docker) and `make-usb.sh` (writes the ISO, adds persistence and config partitions). |
 | `config/usb-router.conf.example` | Every setting, with comments. |
-| `tests/` | pytest suite (22 tests) against a fake NetworkManager, plus the fleet dashboard. |
+| `tests/` | pytest suite against a fake NetworkManager, plus the fleet dashboard. |
 | `HARDWARE.md` | Compute sticks, flash drives, adapters and power supplies to order. |
 
 ## Build the sticks
@@ -156,10 +159,12 @@ All keys are in `config/usb-router.conf.example`. The important ones:
 | `reload_every` | `0` | Reload the content every N minutes |
 | `device_id`, `device_name` | derived, empty | Identity in URLs and the dashboard |
 | `wifi_ssid[_2,_3]`, `wifi_password[_2,_3]` | empty | Zero-touch Wi-Fi profiles created at boot |
-| `setup_hotspot` | `true` | Broadcast the hotspot while offline for phone-based setup |
-| `hotspot_enabled`, `hotspot_ssid`, `hotspot_password`, `hotspot_band` | on, `USB-Router`, `changeme123`, `bg` | Sharing once online, and the name used in setup mode |
-| `lan_access`, `admin_pin` | `true`, empty | Serve the setup page to hotspot clients; PIN required for remote changes if set |
-| `fleet_url`, `fleet_token`, `fleet_interval` | empty, empty, 60 | Fleet dashboard |
+| `setup_hotspot` | `true` | Broadcast while offline and unconfigured so a phone can set the screen up |
+| `hotspot_password` | blank = generated per stick | Hotspot password. Weak values (`changeme…`, `password`, `12345678`) are refused |
+| `admin_pin` | blank = generated per stick | 6-digit PIN required for every change; shown on the screen only |
+| `hotspot_enabled`, `hotspot_ssid`, `hotspot_band` | `false`, `USB-Router`, `bg` | Share the connection with nearby devices once online (opt-in) |
+| `lan_access` | `true` | Serve the setup page to hotspot clients (PIN still required) |
+| `fleet_url`, `fleet_token`, `fleet_interval` | empty, empty, 60 | Fleet dashboard. No token = the client stays off |
 | `allow_exit` | `false` | Quit button / Ctrl+Q |
 
 Environment variables `USB_ROUTER_<KEY>` override the file.
@@ -179,15 +184,19 @@ The browser, the page and the dashboard all use the same JSON API on port 8080.
 | GET, POST | `/api/settings` | Read / change settings |
 | POST | `/api/system` | `{action: reload / restart-browser / reboot / shutdown}` |
 | POST | `/api/fleet/ping` | Send a heartbeat now |
-| GET | `/api/qr?kind=wifi` or `ui` | PNG QR codes for phone setup |
+| POST | `/api/setup-mode` | `{action: open / close}` re-allow phone setup (screen only) |
+| POST | `/api/secrets/rotate` | `{name: admin_pin / hotspot_password}` new random value |
+| GET | `/api/qr?kind=wifi` or `ui` | PNG QR codes for phone setup (screen only) |
 | GET | `/api/display` | Rotation, used by the X session |
 | POST | `/api/browser/go` | `{url?}` leave the setup screen |
 | GET | `/api/browser/poll` | What the browser polls: navigate, action, homepage, kiosk, reload interval |
 | POST | `/api/browser/report` | `{url}` what the browser is showing |
 
-Changes from the local screen need nothing. Changes from the hotspot side are
-allowed when `lan_access` is on (the hotspot password is the gate) and require
-the `X-Admin-Pin` header when `admin_pin` is set.
+Every POST except the browser's own `report` needs the `X-Admin-Pin` header,
+from the screen and from the hotspot side alike. The screen's own page fills it
+in automatically (the server reveals the PIN to loopback only); a phone is
+prompted for the PIN printed on the screen. Five wrong PINs lock that address
+out with an escalating delay. `lan_access = false` refuses the LAN side entirely.
 
 ## Browser keyboard shortcuts
 
@@ -207,10 +216,17 @@ the `X-Admin-Pin` header when `admin_pin` is set.
 
 - The web app runs as the unprivileged `kiosk` user and controls NetworkManager
   and reboot/power-off through polkit rules for the `netdev` group, nothing else.
-- Change `hotspot_password` before deploying. In setup mode it is shown on the
-  screen on purpose; it is what lets the installer's phone in.
-- Set `admin_pin` if screens will keep broadcasting a hotspot in public.
-- The fleet token is sent as a Bearer header; run the dashboard behind HTTPS.
+- There are no shared default secrets. Each stick generates its own hotspot
+  password and admin PIN at first boot (stored root-readable in
+  `/var/lib/usb-router/secrets.json` on the persistence partition) and shows
+  them only on its own screen. If you set your own in `usb-router.conf`, use
+  8+ character passwords; common defaults are refused.
+- The setup hotspot only runs while the screen is offline and unconfigured,
+  or for 15 minutes after Ctrl+N. It switches off once the screen is online.
+- Every change needs the admin PIN, with lockout after repeated wrong guesses.
+- The fleet client refuses to run without a token; the dashboard refuses to
+  start without `FLEET_TOKEN` and `FLEET_ADMIN_PASSWORD`. Generate both with
+  `openssl rand`. Run the dashboard behind HTTPS.
 - The browser refuses to bypass TLS certificate errors.
 - The persistence partition is not encrypted. Wi-Fi passwords are stored on it,
   root-readable only. Treat a stick like a laptop.
@@ -218,7 +234,7 @@ the `X-Admin-Pin` header when `admin_pin` is set.
 ## What was and was not verified
 
 - The web app, API and fleet dashboard were exercised end to end against the
-  mock backend (22 pytest tests) and through a headless Chromium run of the
+  mock backend (pytest, see `tests/`) and through a headless Chromium run of the
   setup, connect, hotspot and captive-portal flows.
 - `browser/browser.py` compiles but needs a display and PyQt6; it was not run here.
 - The ISO was not built here. `build-iso.sh` is a standard live-build recipe;

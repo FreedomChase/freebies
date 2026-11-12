@@ -7,17 +7,20 @@ Screens POST a heartbeat to /api/heartbeat (see app/fleet_client.py). The reply
 carries any settings you changed here, so a screen picks up a new content URL,
 rotation, or a reboot request within one heartbeat interval.
 
-    FLEET_TOKEN=supersecret FLEET_ADMIN_PASSWORD=letmein python3 fleet/server.py
+    FLEET_TOKEN="$(openssl rand -hex 16)" FLEET_ADMIN_PASSWORD="$(openssl rand -base64 12)" \
+        python3 fleet/server.py
     -> dashboard on http://0.0.0.0:4010/   (put it behind HTTPS in production)
 
-Set the same FLEET_TOKEN in usb-router.conf (fleet_token) on every stick and
-fleet_url = https://your-host/  (no trailing path needed).
+There are no default secrets: the server refuses to start unless both
+FLEET_TOKEN and FLEET_ADMIN_PASSWORD are set. Put the same FLEET_TOKEN in
+usb-router.conf (fleet_token) on every stick, with fleet_url = https://your-host/.
 """
 
 import hmac
 import json
 import os
 import sqlite3
+import sys
 import time
 from functools import wraps
 
@@ -59,11 +62,24 @@ def screen_token_ok():
     return bool(TOKEN) and hmac.compare_digest(auth, "Bearer " + TOKEN)
 
 
+def require_config(token=None, admin_password=None):
+    """Refuse to run without secrets. Raises SystemExit with the reason."""
+    token = TOKEN if token is None else token
+    admin_password = ADMIN_PASSWORD if admin_password is None else admin_password
+    problems = []
+    if len(token or "") < 16:
+        problems.append("FLEET_TOKEN must be set (16+ characters, e.g. openssl rand -hex 16)")
+    if len(admin_password or "") < 8:
+        problems.append("FLEET_ADMIN_PASSWORD must be set (8+ characters)")
+    if problems:
+        raise SystemExit("fleet dashboard refusing to start:\n  - " + "\n  - ".join(problems))
+
+
 def admin_required(fn):
     @wraps(fn)
     def wrapper(*a, **kw):
         if not ADMIN_PASSWORD:
-            return fn(*a, **kw)  # explicitly unprotected (dev only)
+            abort(503)  # never run open; require_config() prevents this in practice
         auth = request.authorization
         if not auth or not hmac.compare_digest(auth.password or "", ADMIN_PASSWORD):
             return Response("Login required", 401, {"WWW-Authenticate": 'Basic realm="fleet"'})
@@ -184,8 +200,9 @@ def update_group(group_name):
 
 
 if __name__ == "__main__":
-    if not TOKEN:
-        print("WARNING: FLEET_TOKEN is empty; screens cannot authenticate. Set FLEET_TOKEN.")
-    if not ADMIN_PASSWORD:
-        print("WARNING: FLEET_ADMIN_PASSWORD is empty; the dashboard is open to anyone who can reach it.")
+    try:
+        require_config()
+    except SystemExit as e:
+        print(e, file=sys.stderr)
+        sys.exit(2)
     app.run(host="0.0.0.0", port=PORT, threaded=True)

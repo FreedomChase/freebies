@@ -17,6 +17,7 @@ import logging
 import threading
 import time
 
+from config import is_weak_password
 from netman import NetError
 
 log = logging.getLogger("usb-router.router")
@@ -29,6 +30,11 @@ class Router:
         self.lock = threading.Lock()
         self.last_error = None
         self.auto_disabled = False  # set when the user manually stops the hotspot
+        self.role = None            # why the hotspot is up: "setup" | "share" | "manual"
+        self.setup_until = 0.0      # Ctrl+N / "Allow phone setup" re-opens setup mode until this time
+        self.booted = time.time()
+
+    SETUP_WINDOW = 15 * 60
 
     # -- discovery ---------------------------------------------------------
     def uplink(self, devices=None):
@@ -60,8 +66,74 @@ class Router:
         out.sort(key=lambda c: (c["mode"] != "wifi" or not c["ap_capable"], c["mode"] != "wifi"))
         return out
 
+    def is_configured(self):
+        """A screen counts as configured once it has any Wi-Fi to try (config or saved)."""
+        if self.cfg.provisioned_wifi():
+            return True
+        try:
+            for c in self.nm.saved_connections():
+                if c["name"] == self.nm.HOTSPOT_CON or c["name"].startswith(self.nm.SHARE_CON):
+                    continue
+                if c["type"] in ("802-11-wireless", "wifi"):
+                    return True
+        except NetError:
+            pass
+        return False
+
+    def open_setup_window(self, seconds=None):
+        """Let the setup hotspot come back for a while (keyboard user pressed Ctrl+N)."""
+        self.setup_until = time.time() + (seconds or self.SETUP_WINDOW)
+        self.auto_disabled = False
+        return self.setup_until
+
+    def setup_window_open(self):
+        return time.time() < self.setup_until
+
+    def desired(self, online, grace=25):
+        """
+        What the keeper wants right now:
+          share  online and the operator turned sharing on
+          setup  offline, phone setup allowed, and the screen is unconfigured
+                 (or someone re-opened setup mode from the keyboard)
+          off    everything else; in particular once the screen is online the
+                 setup hotspot goes away
+        """
+        if self.auto_disabled:
+            return "off"
+        if online:
+            return "share" if self.cfg.flag("hotspot_enabled") else "off"
+        if not self.cfg.flag("setup_hotspot"):
+            return "off"
+        if time.time() - self.booted < grace and not self.setup_window_open():
+            return "off"  # give a provisioned Wi-Fi a chance to connect first
+        if not self.is_configured() or self.setup_window_open():
+            return "setup"
+        return "off"
+
+    def tick(self, online):
+        """One keeper step. Returns the action taken (for tests/logging)."""
+        want = self.desired(online)
+        active = self.nm.hotspot_status()["active"]
+        if want in ("share", "setup") and not active:
+            try:
+                self.start(role=want)
+                return "started-" + want
+            except NetError:
+                return "failed"
+        if active and self.role == "setup" and want != "setup":
+            self.stop(manual=False)
+            return "stopped-setup"
+        if active and self.role == "share" and want == "off":
+            self.stop(manual=False)
+            return "stopped-share"
+        return "noop"
+
     # -- control -----------------------------------------------------------
-    def start(self, iface=None, mode=None):
+    def start(self, iface=None, mode=None, role="manual"):
+        password = self.cfg.hotspot_password()
+        if is_weak_password(password):
+            self.last_error = "Refusing to start the hotspot with an empty or default password"
+            raise NetError(self.last_error)
         with self.lock:
             devices = self.nm.devices()
             cands = self.candidates(devices)
@@ -81,12 +153,13 @@ class Router:
                     if not chosen["ap_capable"]:
                         raise NetError(f"{chosen['iface']} does not support access-point mode")
                     self.nm.hotspot_start(chosen["iface"], self.cfg.get("hotspot_ssid"),
-                                          self.cfg.get("hotspot_password"), self.cfg.get("hotspot_band"))
+                                          password, self.cfg.get("hotspot_band"))
                 else:
                     self.nm.share_ethernet_start(chosen["iface"])
                 self.last_error = None
                 self.auto_disabled = False
-                log.info("hotspot started on %s (%s)", chosen["iface"], mode)
+                self.role = role
+                log.info("hotspot started on %s (%s, role=%s)", chosen["iface"], mode, role)
             except NetError as e:
                 self.last_error = str(e)
                 log.warning("hotspot failed: %s", e)
@@ -101,6 +174,7 @@ class Router:
                     self.nm.share_ethernet_stop(status["iface"])
                 else:
                     self.nm.hotspot_stop()
+            self.role = None
             if manual:
                 self.auto_disabled = True
             return self.status()
@@ -109,14 +183,18 @@ class Router:
         self.stop(manual=False)
         return self.start()
 
-    def status(self, online=None):
+    def status(self, online=None, local=False):
         s = self.nm.hotspot_status()
         s["ssid"] = self.cfg.get("hotspot_ssid") if s["mode"] == "wifi" else None
-        s["password"] = self.cfg.get("hotspot_password") if s["mode"] == "wifi" else None
+        # the password is shown on the physical screen (and in its QR code), never sent to the LAN side
+        s["password"] = self.cfg.hotspot_password() if (s["mode"] == "wifi" and local) else None
         s["last_error"] = self.last_error
         s["enabled"] = self.cfg.flag("hotspot_enabled") and not self.auto_disabled
+        s["role"] = self.role if s["active"] else None
         # "setup" = we are broadcasting without an uplink so a phone can configure us
-        s["setup"] = bool(s["active"] and online is False)
+        s["setup"] = bool(s["active"] and online is False and self.role in ("setup", "manual", None))
+        s["setup_window_until"] = self.setup_until if self.setup_window_open() else None
+        s["configured"] = self.is_configured()
         s["ui_url"] = f"http://{s['ip'] or '10.42.0.1'}:{self.cfg.get('listen_port')}" if s["active"] else None
         return s
 
@@ -124,28 +202,13 @@ class Router:
         return self.cfg.flag("setup_hotspot") and not self.auto_disabled
 
     # -- background keeper -------------------------------------------------
-    def run_keeper(self, is_online, interval=10, grace=25):
-        """
-        Keep the hotspot up:
-          online  + hotspot_enabled  -> share the internet connection
-          offline + setup_hotspot    -> broadcast anyway (after a grace period, so a
-                                        provisioned Wi-Fi gets a chance to connect first)
-                                        and serve the setup page to phones
-        """
-        started = time.time()
-
+    def run_keeper(self, is_online, interval=10):
+        """Drive the hotspot from desired(): share when online and asked to, setup when offline
+        and unconfigured, otherwise off. See desired()/tick()."""
         def loop():
             while True:
                 try:
-                    online = is_online()
-                    active = self.nm.hotspot_status()["active"]
-                    want = (online and self.cfg.flag("hotspot_enabled") and not self.auto_disabled) or \
-                           (not online and self.wants_setup_hotspot() and time.time() - started > grace)
-                    if want and not active:
-                        try:
-                            self.start()
-                        except NetError:
-                            pass  # already stored in last_error; retry next tick
+                    self.tick(is_online())
                 except Exception as e:  # never let the keeper die
                     log.exception("keeper error: %s", e)
                 time.sleep(interval)

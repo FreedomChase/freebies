@@ -299,6 +299,8 @@ class NetworkManager:
 # ---------------------------------------------------------------------------
 class MockNetworkManager:
     name = "mock"
+    HOTSPOT_CON = NetworkManager.HOTSPOT_CON
+    SHARE_CON = NetworkManager.SHARE_CON
 
     def __init__(self):
         self.connected_ssid = None
@@ -349,7 +351,7 @@ class MockNetworkManager:
         # the mock's only client-capable card is wlan0, so a Wi-Fi hotspot always yields to a connection
         if self.hotspot and self.hotspot["mode"] == "wifi" and iface in (None, self.hotspot["iface"]):
             self.hotspot = None
-        if ssid == "Neighbour" and password != "letmein12":
+        if ssid == "Neighbour" and password != "n3ighb0ur-pass":
             raise NetError("Wrong password or the network rejected the connection")
         if ssid in ("Home WiFi", "Neighbour") and not password and ssid not in self.saved:
             raise NetError("Wrong password or the network rejected the connection")

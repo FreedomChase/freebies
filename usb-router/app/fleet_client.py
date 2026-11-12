@@ -33,13 +33,30 @@ class FleetClient:
         self.last_error = None
         self.started = time.time()
 
+    def enabled(self):
+        """The client only runs with both a URL and a token; there is no default token."""
+        return bool(self.cfg.get("fleet_url")) and bool(self.cfg.get("fleet_token"))
+
+    def reset(self):
+        self.last_contact = None
+        self.last_error = None if self.enabled() else self._disabled_reason()
+
+    def _disabled_reason(self):
+        if not self.cfg.get("fleet_url"):
+            return None
+        if not self.cfg.get("fleet_token"):
+            return "fleet_token is not set; refusing to contact the dashboard without one"
+        return None
+
     def info(self):
-        return {"configured": bool(self.cfg.get("fleet_url")), "last_contact": self.last_contact,
-                "last_error": self.last_error, "url": self.cfg.get("fleet_url")}
+        return {"configured": bool(self.cfg.get("fleet_url")), "enabled": self.enabled(),
+                "last_contact": self.last_contact, "last_error": self.last_error or self._disabled_reason(),
+                "url": self.cfg.get("fleet_url")}
 
     def heartbeat(self):
         base = self.cfg.get("fleet_url").rstrip("/")
-        if not base:
+        if not base or not self.enabled():
+            self.last_error = self._disabled_reason()
             return None
         status = self.status_fn()
         payload = {
@@ -58,9 +75,7 @@ class FleetClient:
         }
         req = urllib.request.Request(base + "/api/heartbeat", data=json.dumps(payload).encode(),
                                      headers={"Content-Type": "application/json", "User-Agent": "usb-router/1.0"})
-        token = self.cfg.get("fleet_token")
-        if token:
-            req.add_header("Authorization", "Bearer " + token)
+        req.add_header("Authorization", "Bearer " + self.cfg.get("fleet_token"))
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
                 reply = json.loads(resp.read().decode("utf-8") or "{}")
@@ -95,10 +110,13 @@ class FleetClient:
         return {"changed": changed, "action": action}
 
     def run(self):
+        if self.cfg.get("fleet_url") and not self.cfg.get("fleet_token"):
+            log.warning("fleet_url is set but fleet_token is empty: fleet client disabled until a token is configured")
+
         def loop():
             while True:
                 try:
-                    if self.cfg.get("fleet_url"):
+                    if self.enabled():
                         self.heartbeat()
                 except Exception as e:  # noqa: BLE001
                     log.exception("fleet heartbeat error: %s", e)

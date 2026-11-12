@@ -2,14 +2,28 @@
    Plain JS, no build step. Talks to the Flask API on the same origin. */
 (() => {
   const $ = (id) => document.getElementById(id);
-  const api = async (path, opts = {}) => {
+
+  /* Admin PIN: every change needs it. The screen's own page receives it from the
+     server (loopback only) and fills it in; a phone on the hotspot is asked for
+     the PIN that is printed on the screen. */
+  let adminPin = "";
+  try { adminPin = sessionStorage.getItem("adminPin") || ""; } catch (_) { /* private mode */ }
+  const rememberPin = (pin) => { adminPin = pin; try { sessionStorage.setItem("adminPin", pin); } catch (_) { /* ignore */ } };
+  const askPin = () => {
+    const pin = prompt("Enter the 6-digit admin PIN shown on the screen's setup page:");
+    if (pin && pin.trim()) { rememberPin(pin.trim()); return true; }
+    return false;
+  };
+
+  const api = async (path, opts = {}, retried = false) => {
     const res = await fetch(path, {
-      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      headers: { "Content-Type": "application/json", ...(adminPin ? { "X-Admin-Pin": adminPin } : {}), ...(opts.headers || {}) },
       ...opts,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     let data = {};
     try { data = await res.json(); } catch (_) { /* non-JSON error page */ }
+    if (res.status === 401 && data.pin_required && !retried && askPin()) return api(path, opts, true);
     if (!res.ok || data.ok === false) throw new Error(data.error || `Request failed (${res.status})`);
     return data;
   };
@@ -44,6 +58,8 @@
     $("portal-banner").classList.toggle("hidden", !s.captive_portal);
     $("online-homepage").textContent = s.settings.resolved_homepage;
     $("device-label").textContent = (s.device.name ? `${s.device.name} · ` : "") + s.device.id;
+    if (s.local && s.settings.admin_pin) rememberPin(s.settings.admin_pin);
+    renderPin(s);
     renderSetup(s);
     renderFleet(s);
     $("portal-open").onclick = () => api("/api/browser/go", { method: "POST", body: { url: s.portal_url || "http://neverssl.com" } })
@@ -63,19 +79,52 @@
     }
   };
 
+  /* ---------------- admin PIN panel (screen only) ---------------- */
+  const renderPin = (s) => {
+    const box = $("pin-card");
+    if (!s.local) { box.classList.add("hidden"); return; }
+    box.classList.remove("hidden");
+    $("pin-value").textContent = s.settings.admin_pin || "";
+    $("pin-source").textContent = s.settings.admin_pin_source === "config" ? "set in usb-router.conf" : "generated for this stick";
+    $("hs-pass-source").textContent = s.settings.hotspot_password_source === "config" ? "" : `(${s.settings.hotspot_password_source})`;
+    const h = s.hotspot;
+    $("setup-open").classList.toggle("hidden", !!h.setup_window_until || s.online);
+    $("setup-close").classList.toggle("hidden", !h.setup_window_until);
+    $("setup-window-note").textContent = h.setup_window_until
+      ? `Phone setup is allowed for another ${Math.max(0, Math.round((h.setup_window_until * 1000 - Date.now()) / 60000))} min while offline.`
+      : s.online ? "Phone setup is off while the screen is online."
+      : h.configured ? "This screen already has Wi-Fi configured, so it does not broadcast for phone setup unless you allow it."
+      : "Unconfigured and offline: the setup hotspot starts about 25 s after boot.";
+  };
+  $("setup-open").onclick = async () => { try { await api("/api/setup-mode", { method: "POST", body: { action: "open" } }); toast("Phone setup allowed for 15 minutes", "ok"); } catch (e) { toast(e.message, "bad"); } refreshStatus(true); };
+  $("setup-close").onclick = async () => { try { await api("/api/setup-mode", { method: "POST", body: { action: "close" } }); } catch (e) { toast(e.message, "bad"); } refreshStatus(true); };
+  document.querySelectorAll("[data-rotate]").forEach((b) => {
+    b.onclick = async () => {
+      if (!confirm(`Generate a new ${b.dataset.rotate === "admin_pin" ? "admin PIN" : "hotspot password"} for this screen?`)) return;
+      busy(b, true);
+      try { const r = await api("/api/secrets/rotate", { method: "POST", body: { name: b.dataset.rotate } }); if (r.settings.admin_pin) rememberPin(r.settings.admin_pin); fillSettings(r.settings); toast("Done", "ok"); }
+      catch (e) { toast(e.message, "bad"); }
+      busy(b, false); refreshStatus(true);
+    };
+  });
+
   /* ---------------- phone setup ---------------- */
   let setupShown = false;
   const renderSetup = (s) => {
     const h = s.hotspot;
     const show = !s.online && h.active && h.mode === "wifi";
     $("setup-card").classList.toggle("hidden", !show);
-    if (show && !setupShown) {
+    $("setup-phone-note").classList.toggle("hidden", s.local);
+    $("qr-wrap").classList.toggle("hidden", !s.local);
+    if (show && s.local && !setupShown) {
       setupShown = true;
       $("qr-wifi").src = `/api/qr?kind=wifi&t=${Date.now()}`;
       $("qr-ui").src = `/api/qr?kind=ui&t=${Date.now()}`;
     }
     if (!show) setupShown = false;
-    $("setup-ssid").textContent = h.ssid || ""; $("setup-pass").textContent = h.password || "(none)";
+    $("setup-ssid").textContent = h.ssid || "";
+    $("setup-pass").textContent = s.local ? (h.password || "") : "(shown on the screen)";
+    $("setup-pin").textContent = s.local ? (s.settings.admin_pin || "") : "(shown on the screen)";
     $("setup-url").textContent = h.ui_url || ""; $("setup-id").textContent = s.device.id;
   };
 
@@ -272,7 +321,8 @@
 
   /* ---------------- settings ---------------- */
   const fillSettings = (s) => {
-    $("hs-ssid").value = s.hotspot_ssid; $("hs-pass").value = s.hotspot_password; $("hs-band").value = s.hotspot_band;
+    $("hs-ssid").value = s.hotspot_ssid; $("hs-pass").value = s.hotspot_password || ""; $("hs-band").value = s.hotspot_band;
+    $("hs-pass").placeholder = s.hotspot_password ? "" : "(shown on the screen; blank keeps it)";
     $("hotspot-enabled").checked = s.hotspot_enabled; $("setup-hotspot").checked = s.setup_hotspot;
     $("set-homepage").value = s.homepage; $("set-kiosk").checked = s.kiosk; $("set-exit").checked = s.allow_exit;
     $("set-name").value = s.device_name; $("set-rotation").value = s.rotation; $("set-reload").value = s.reload_every;

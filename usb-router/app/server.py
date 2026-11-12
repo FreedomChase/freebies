@@ -26,6 +26,7 @@ Run on a laptop for development:
 """
 
 import functools
+import hmac
 import io
 import ipaddress
 import logging
@@ -134,8 +135,6 @@ def fleet_status():
 
 
 fleet = FleetClient(cfg, fleet_status, system_action)
-
-
 # --------------------------------------------------------------------------
 # Access control: the UI is for the local screen; optional PIN on the LAN side
 # --------------------------------------------------------------------------
@@ -146,16 +145,59 @@ def _is_local():
         return False
 
 
+# Brute-force protection for the PIN: per-address failure count with escalating lockout.
+_pin_failures = {}
+_pin_lock = threading.Lock()
+PIN_FREE_ATTEMPTS = 5
+
+
+def _pin_locked(addr):
+    with _pin_lock:
+        count, until = _pin_failures.get(addr, (0, 0))
+        return max(0, int(until - time.time()))
+
+
+def _pin_failed(addr):
+    with _pin_lock:
+        count, _ = _pin_failures.get(addr, (0, 0))
+        count += 1
+        over = count - PIN_FREE_ATTEMPTS  # 6th wrong PIN locks for 30 s, then 60, 120, ... up to 15 min
+        lock = min(900, 30 * 2 ** (over - 1)) if over >= 1 else 0
+        _pin_failures[addr] = (count, time.time() + lock)
+        return lock
+
+
+def _pin_ok(addr):
+    with _pin_lock:
+        _pin_failures.pop(addr, None)
+
+
+def pin_valid(given):
+    return bool(given) and hmac.compare_digest(str(given), cfg.admin_pin())
+
+
 def admin_required(fn):
+    """
+    Every change needs the admin PIN (header X-Admin-Pin), from the screen itself
+    and from any phone on the hotspot alike. The PIN is shown only on the physical
+    screen's page; the page on the screen fills it in for its own requests.
+    """
     @functools.wraps(fn)
     def wrapper(*a, **kw):
-        if _is_local():
-            return fn(*a, **kw)
-        if not cfg.flag("lan_access"):
+        if not _is_local() and not cfg.flag("lan_access"):
             abort(403)
-        pin = cfg.get("admin_pin")
-        if pin and request.headers.get("X-Admin-Pin", "") != pin:
-            return jsonify({"ok": False, "error": "Admin PIN required"}), 401
+        addr = request.remote_addr or "?"
+        wait = _pin_locked(addr)
+        if wait:
+            return jsonify({"ok": False, "error": f"Too many wrong PINs; try again in {wait} s"}), 429
+        given = request.headers.get("X-Admin-Pin", "")
+        if not pin_valid(given):
+            lock = _pin_failed(addr) if given else 0
+            msg = "Admin PIN required (it is shown on the screen)" if not given else "Wrong admin PIN"
+            if lock:
+                msg += f"; locked for {lock} s"
+            return jsonify({"ok": False, "error": msg, "pin_required": True}), 401
+        _pin_ok(addr)
         return fn(*a, **kw)
     return wrapper
 
@@ -173,7 +215,7 @@ def fail(msg, code=400):
 # --------------------------------------------------------------------------
 @app.get("/")
 def index():
-    return render_template("index.html", settings=cfg.public(), mock=MOCK)
+    return render_template("index.html", settings=cfg.public(local=_is_local()), mock=MOCK)
 
 
 @app.get("/healthz")
@@ -200,8 +242,9 @@ def api_status():
         "verdict": check["verdict"],
         "uplink": uplink,
         "devices": devices,
-        "hotspot": router.status(check["online"]),
-        "settings": cfg.public(),
+        "hotspot": router.status(check["online"], local=_is_local()),
+        "settings": cfg.public(local=_is_local()),
+        "local": _is_local(),
         "device": {"id": cfg.device_id(), "name": cfg.get("device_name"), "provisioned": _state["provisioned"]},
         "fleet": fleet.info(),
         "current_url": _state["current_url"],
@@ -292,7 +335,8 @@ def api_ethernet():
 @app.get("/api/hotspot")
 def api_hotspot():
     try:
-        return jsonify({"ok": True, "hotspot": router.status(), "candidates": router.candidates()})
+        return jsonify({"ok": True, "hotspot": router.status(run_check()["online"], local=_is_local()),
+                        "candidates": router.candidates()})
     except NetError as e:
         return fail(e, 500)
 
@@ -313,7 +357,7 @@ def api_hotspot_action():
             return fail("Unknown action")
     except NetError as e:
         return fail(e, 502)
-    return jsonify({"ok": True, "hotspot": status})
+    return jsonify({"ok": True, "hotspot": router.status(run_check()["online"], local=_is_local())})
 
 
 # --------------------------------------------------------------------------
@@ -321,7 +365,7 @@ def api_hotspot_action():
 # --------------------------------------------------------------------------
 @app.get("/api/settings")
 def api_settings():
-    return jsonify({"ok": True, "settings": cfg.public()})
+    return jsonify({"ok": True, "settings": cfg.public(local=_is_local())})
 
 
 @app.post("/api/settings")
@@ -347,7 +391,9 @@ def api_settings_update():
                 pass
     if "rotation" in changed:
         apply_rotation(changed["rotation"])
-    return jsonify({"ok": True, "changed": changed, "settings": cfg.public()})
+    if "fleet_url" in changed or "fleet_token" in changed:
+        fleet.reset()
+    return jsonify({"ok": True, "changed": changed, "settings": cfg.public(local=_is_local())})
 
 
 def apply_rotation(rotation):
@@ -398,10 +444,51 @@ def api_fleet_ping():
     """Send a heartbeat now (used by the Save button next to the fleet URL)."""
     if not cfg.get("fleet_url"):
         return fail("No fleet URL configured")
+    if not cfg.get("fleet_token"):
+        return fail("A fleet token is required before the screen will talk to a dashboard")
     result = fleet.heartbeat()
     if result is None:
         return fail(f"Dashboard unreachable: {fleet.last_error}", 502)
     return jsonify({"ok": True, **result, "fleet": fleet.info()})
+
+
+# --------------------------------------------------------------------------
+# Phone setup window and secret rotation
+# --------------------------------------------------------------------------
+@app.post("/api/setup-mode")
+def api_setup_mode():
+    """
+    Re-open phone setup from the screen itself (Ctrl+N in the browser, or the
+    button on the local page). Loopback only: it needs someone at the screen.
+    The hotspot only actually starts while the screen is offline.
+    """
+    if not _is_local():
+        abort(403)
+    action = (body().get("action") or "open").strip()
+    if action == "close":
+        router.setup_until = 0.0
+        if router.role == "setup":
+            router.stop(manual=False)
+    else:
+        router.open_setup_window()
+    return jsonify({"ok": True, "hotspot": router.status(run_check()["online"], local=True)})
+
+
+@app.post("/api/secrets/rotate")
+@admin_required
+def api_secrets_rotate():
+    """New random hotspot password or admin PIN (shown on the screen afterwards)."""
+    name = (body().get("name") or "").strip()
+    try:
+        cfg.rotate_secret(name)
+    except ValueError as e:
+        return fail(e)
+    if name == "hotspot_password" and router.status()["active"]:
+        try:
+            router.restart()
+        except NetError as e:
+            log.warning("hotspot restart after password rotation failed: %s", e)
+    return jsonify({"ok": True, "settings": cfg.public(local=_is_local())})
 
 
 # --------------------------------------------------------------------------
@@ -411,11 +498,15 @@ def api_fleet_ping():
 def api_qr():
     kind = request.args.get("kind", "wifi")
     if kind == "wifi":
-        ssid, pw = cfg.get("hotspot_ssid"), cfg.get("hotspot_password")
+        if not _is_local():
+            abort(403)  # the QR codes carry the hotspot password: screen only
+        ssid, pw = cfg.get("hotspot_ssid"), cfg.hotspot_password()
         def esc(v):  # WIFI: QR format escapes \ ; , :
             return v.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace(":", "\\:")
         data = f"WIFI:T:{'WPA' if pw else 'nopass'};S:{esc(ssid)};" + (f"P:{esc(pw)};" if pw else "") + ";"
     elif kind == "ui":
+        if not _is_local():
+            abort(403)
         data = router.status().get("ui_url") or f"http://10.42.0.1:{cfg.get('listen_port')}"
     else:
         return fail("kind must be wifi or ui")
@@ -489,6 +580,8 @@ def main():
     provision_wifi()
     router.run_keeper(is_online)
     fleet.run()
+    log.info("device %s; hotspot password: %s; admin PIN: %s (both shown on the screen's own page)",
+             cfg.device_id(), cfg.hotspot_password_source(), "from config" if cfg.get("admin_pin").strip() else "generated")
     log.info("USB Router connection manager on http://%s:%s (backend=%s)", host, port, nm.name)
     app.run(host=host, port=port, debug=False, threaded=True)
 
