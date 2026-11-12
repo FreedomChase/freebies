@@ -21,6 +21,7 @@ class FakeCog:
     def __init__(self):
         self.running = False
         self.log = []
+        self.ctl_ok = True      # False = cogctl cannot reach cog
 
     def start(self, url):
         self.running = True
@@ -31,9 +32,11 @@ class FakeCog:
 
     def open(self, url):
         self.log.append(("open", url))
+        return self.ctl_ok
 
     def reload(self):
         self.log.append(("reload",))
+        return self.ctl_ok
 
     def stop(self):
         self.running = False
@@ -209,3 +212,32 @@ def test_cog_command_line():
     assert "--platform=drm" in cmd and "--web-mem-limit=200" in cmd
     assert "--webprocess-failure=restart" in cmd
     assert not any("ignore-tls" in a for a in cmd)   # never bypass certificate errors
+
+
+def test_failed_cogctl_open_restarts_cog_on_the_wanted_page():
+    w, cog, k = make()
+    cog.ctl_ok = False
+    w.poll["online"] = True
+    assert k.step() == "left-setup"
+    assert cog.log[-3:] == [("open", HOME), ("stop",), ("start", HOME)]
+    assert k.control_failures == 1 and k.showing == HOME
+
+
+def test_failed_cogctl_reload_restarts_cog_on_what_was_showing():
+    w, cog, k = make()
+    w.poll["online"] = True
+    k.step()
+    cog.ctl_ok = False
+    w.poll["action"] = "reload"
+    assert k.step() == "reloaded"
+    assert cog.log[-3:] == [("reload",), ("stop",), ("start", HOME)]
+    assert k.control_failures == 1
+
+
+def test_working_cogctl_never_restarts_cog():
+    w, cog, k = make()
+    w.poll["online"] = True
+    k.step()
+    w.poll["action"] = "reload"
+    k.step()
+    assert ("stop",) not in cog.log and k.control_failures == 0

@@ -140,6 +140,7 @@ class Kiosk:
         self.next_probe = None
         self.reload_every = 0
         self.next_reload = None
+        self.control_failures = 0     # cogctl calls that failed and forced a cog restart
 
     # -- helpers -----------------------------------------------------------
     def setup_url(self):
@@ -153,8 +154,19 @@ class Kiosk:
         self.showing = url
         if not self.b.alive():
             self.b.start(url)
-        else:
-            self.b.open(url)
+        elif not self.b.open(url):
+            self._control_failed("open", url)
+
+    def _reload(self):
+        if not self.b.reload():
+            self._control_failed("reload", self.showing or self.setup_url())
+
+    def _control_failed(self, what, url):
+        # cogctl could not reach cog (bus gone, cog hung): restart cog on the page it should show
+        log.warning("cogctl %s failed; restarting cog on %s", what, url)
+        self.control_failures += 1
+        self.b.stop()
+        self.b.start(url)
 
     def start(self):
         self.mode = "setup"
@@ -238,10 +250,10 @@ class Kiosk:
 
         # content showing
         if online and was_online is False:
-            self.b.reload()
+            self._reload()
             return "reloaded-network-back"
         if data.get("action") == "reload":
-            self.b.reload()
+            self._reload()
             return "reloaded"
         if self.next_probe is not None and now >= self.next_probe:
             self.next_probe = now + PROBE_EVERY
@@ -250,7 +262,7 @@ class Kiosk:
                 return "content-down"
         if self.next_reload is not None and now >= self.next_reload:
             self.next_reload = now + self.reload_every * 60
-            self.b.reload()
+            self._reload()
             return "scheduled-reload"
         return "ok"
 
