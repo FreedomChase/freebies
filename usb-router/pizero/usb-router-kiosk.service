@@ -8,7 +8,8 @@ After=getty@tty1.service
 
 [Service]
 Type=simple
-User=kiosk
+# not the manager's user: cog shows outside web pages, so it gets the screen and nothing else
+User=signage
 # a logind session on tty1 gives the kiosk user the screen (DRM) and input devices
 PAMName=login
 TTYPath=/dev/tty1

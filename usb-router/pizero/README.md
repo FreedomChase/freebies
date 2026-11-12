@@ -81,6 +81,24 @@ Keep the GPU share small so this fits: the KMS driver takes its memory from CMA,
 so leave `gpu_mem` unset (or 64 at most) in `config.txt` rather than giving the
 GPU half the RAM as some signage images do.
 
+### Memory at 1080p: an estimate, not yet measured on a real Pi
+
+| Part | MiB | Source |
+|---|---|---|
+| GPU firmware share (`gpu_mem`) | 64 | assumed, the setting above |
+| Kernel and base Pi OS Lite | 70 | assumed |
+| Connection manager | 70 | measured upper bound (under emulation) |
+| cog + WebKit, one simple page | 204 | measured (headless, no screen) |
+| Screen buffers, 1920 x 1080 x 4 bytes x 3 | 24 | arithmetic |
+| WebKit GPU tiles at 1080p | 30 to 60 | assumed |
+| **Total** | **460 to 490** | of 512 |
+
+So 1080p is tight on paper: a heavy content page could push it into swap
+(zram softens this). If the first real-Pi check shows too little free memory,
+run the screen at 720p by adding `video=HDMI-A-1:1280x720@60` to `cmdline.txt`
+(screen buffers drop to about 11 MiB and WebKit tiles shrink with them).
+The first check on real hardware: `free -m` with the content page showing at 1080p.
+
 Logs: `journalctl -u usb-router-connect -u usb-router-kiosk -f`
 
 ## Test it without a Pi

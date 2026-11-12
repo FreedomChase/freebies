@@ -31,10 +31,18 @@ PKGS="network-manager dnsmasq-base iw wireless-regdb python3 python3-flask pytho
 # shellcheck disable=SC2086
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $PKGS
 
-echo "==> user"
+echo "==> users"
+# kiosk runs the connection manager: drives NetworkManager (netdev) and holds the PIN and passwords
 id kiosk >/dev/null 2>&1 || useradd -m -s /bin/bash kiosk
-for g in netdev video render input audio plugdev; do
+for g in netdev plugdev; do
   getent group "$g" >/dev/null && usermod -aG "$g" kiosk
+done
+# signage runs cog, which shows third-party web pages: the screen and input only.
+# It talks to the manager over http://127.0.0.1:8080 like any browser; it cannot read
+# /var/lib/usb-router (secrets) or drive NetworkManager.
+id signage >/dev/null 2>&1 || useradd -m -s /bin/bash signage
+for g in video render input audio; do
+  getent group "$g" >/dev/null && usermod -aG "$g" signage
 done
 
 echo "==> files"

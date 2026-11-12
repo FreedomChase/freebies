@@ -23,6 +23,19 @@ fi
 apt-get install -y -qq --no-install-recommends python3-pytest procps >/dev/null 2>&1
 echo "cog $(dpkg-query -W -f='${Version}' cog), wpewebkit $(dpkg-query -W -f='${Version}' libwpewebkit-1.1-0), python3 $(dpkg-query -W -f='${Version}' python3), flask $(dpkg-query -W -f='${Version}' python3-flask)"
 
+echo "== 0. boot autostart: the unit files systemd will load"
+if command -v systemd-analyze >/dev/null; then
+  for u in usb-router-connect usb-router-kiosk; do
+    out=$(systemd-analyze verify /etc/systemd/system/$u.service 2>&1 | grep -v -i "no such file or directory.*sysinit\|Failed to connect\|System has not been booted"); \
+    [ -z "$out" ] && pass "systemd-analyze verify $u.service: clean" || { fail "systemd-analyze verify $u.service"; echo "$out" | sed 's/^/      /' | head -8; }
+  done
+  grep -q '^User=signage' /etc/systemd/system/usb-router-kiosk.service && pass "kiosk unit runs as signage" || fail "kiosk unit user"
+  grep -q '^WantedBy=multi-user.target' /etc/systemd/system/usb-router-kiosk.service && grep -q '^After=usb-router-connect.service' /etc/systemd/system/usb-router-kiosk.service \
+    && pass "kiosk unit starts at boot, after the connection manager" || fail "kiosk unit boot order"
+else
+  echo "INFO  systemd-analyze not in the image; unit files not verified"
+fi
+
 echo "== 1. pytest under ARM1176"
 cd /tmp/usb-router
 if USB_ROUTER_MOCK=1 $EMU /usr/bin/python3 -m pytest -q -p no:cacheprovider tests/ > /tmp/pytest.log 2>&1; then
@@ -52,9 +65,9 @@ for b in $(find /usr/lib/arm-linux-gnueabihf/wpe-webkit-1.1 -maxdepth 1 -type f 
   printf '#!/bin/sh\nexec qemu-arm-static -cpu arm1176 %s.real "$@"\n' "$b" > "$b"; chmod 755 "$b"
 done
 ls /usr/lib/arm-linux-gnueabihf/wpe-webkit-1.1/ | tr '\n' ' '; echo
-export XDG_RUNTIME_DIR=/tmp/xdg; install -d -m 700 -o kiosk /tmp/xdg
+export XDG_RUNTIME_DIR=/tmp/xdg; install -d -m 700 -o signage /tmp/xdg
 : > /tmp/cog.log
-su kiosk -s /bin/sh -c "XDG_RUNTIME_DIR=/tmp/xdg timeout 240 dbus-run-session -- $EMU /usr/bin/cog --platform=headless \
+su signage -s /bin/sh -c "XDG_RUNTIME_DIR=/tmp/xdg timeout 240 dbus-run-session -- $EMU /usr/bin/cog --platform=headless \
   'http://127.0.0.1:8080/static/unavailable.html?u=https%3A%2F%2Fsignage.example.com&s=pz-1&r=5'" >> /tmp/cog.log 2>&1 &
 COG=$!
 for i in $(seq 1 240); do grep -q "GET /static/unavailable.js" /tmp/server.log && break; sleep 1; done
@@ -64,15 +77,18 @@ grep -q "GET /static/unavailable.js" /tmp/server.log && pass "WebKit fetched una
 ps -eo args | grep -E "qemu-arm-static -cpu arm1176 .*(cog|WPEWebProcess|WPENetworkProcess)" | grep -v grep | sed 's/^/      /' | cut -c1-120
 kill $COG 2>/dev/null; pkill -f WPEWebProcess; pkill -f WPENetworkProcess; pkill -f "bin/cog" ; sleep 2
 
+echo "== 3b. the browser user is kept away from the manager's secrets"
+id -nG signage | tr ' ' '\n' | grep -qx netdev && fail "signage is in netdev" || pass "signage not in netdev (cannot drive NetworkManager)"
+su signage -s /bin/sh -c "ls /var/lib/usb-router" >/dev/null 2>&1 && fail "signage can list /var/lib/usb-router" || pass "signage cannot read /var/lib/usb-router"
 echo "== 4. kiosk controller + headless cog against the live manager"
 : > /tmp/kiosk.log
-su kiosk -s /bin/sh -c "XDG_RUNTIME_DIR=/tmp/xdg USB_ROUTER_COG_PLATFORM=headless timeout 300 dbus-run-session -- \
+su signage -s /bin/sh -c "XDG_RUNTIME_DIR=/tmp/xdg USB_ROUTER_COG_PLATFORM=headless timeout 300 dbus-run-session -- \
   $EMU /usr/bin/python3 /opt/usb-router/pizero/kiosk.py --once" > /tmp/kiosk.log 2>&1
 rc=$?
 grep -q "starting cog" /tmp/kiosk.log && pass "kiosk started cog: $(grep -o 'starting cog: .*' /tmp/kiosk.log | head -1 | cut -c1-110)" || fail "kiosk did not start cog"
 [ $rc -eq 0 ] && pass "kiosk --once exit 0" || { fail "kiosk exit $rc"; tail -15 /tmp/kiosk.log; }
 # cogctl reaches the running cog over the session bus (open a URL, then ping)
-su kiosk -s /bin/sh -c "XDG_RUNTIME_DIR=/tmp/xdg timeout 240 dbus-run-session -- sh -c '\
+su signage -s /bin/sh -c "XDG_RUNTIME_DIR=/tmp/xdg timeout 240 dbus-run-session -- sh -c '\
   $EMU /usr/bin/cog --platform=headless http://127.0.0.1:8080/ & sleep 60; \
   $EMU /usr/bin/cogctl ping; rc=\$?; echo COGCTL_PING_RC=\$rc; [ \$rc -eq 0 ] && echo COGCTL_PING_OK; \
   $EMU /usr/bin/cogctl open \"http://127.0.0.1:8080/static/unavailable.html?u=cogctl&s=pz&r=1\" && echo COGCTL_OPEN_OK; \
@@ -85,7 +101,7 @@ pkill -f WPEWebProcess; pkill -f WPENetworkProcess; sleep 1
 
 echo "== 5. memory estimate (native, not emulated; headless, no GPU)"
 for b in /usr/lib/arm-linux-gnueabihf/wpe-webkit-1.1/WPE*Process.real; do mv "$b" "${b%.real}"; done
-su kiosk -s /bin/sh -c "XDG_RUNTIME_DIR=/tmp/xdg timeout 60 dbus-run-session -- /usr/bin/cog --platform=headless --web-mem-limit=200 http://127.0.0.1:8080/" >/dev/null 2>&1 &
+su signage -s /bin/sh -c "XDG_RUNTIME_DIR=/tmp/xdg timeout 60 dbus-run-session -- /usr/bin/cog --platform=headless --web-mem-limit=200 http://127.0.0.1:8080/" >/dev/null 2>&1 &
 sleep 25
 ps -eo rss,comm | awk '/cog|WPEWebProcess|WPENetworkProc/ {s+=$1; printf "      %-22s %6d KiB\n", $2, $1} END {printf "      total                  %6d KiB (%.0f MiB)\n", s, s/1024}'
 SRV_RSS=$(ps -o rss= -p "$(pgrep -f 'app/server.py' | tail -1)" 2>/dev/null || echo 0)
