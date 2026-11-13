@@ -15,6 +15,9 @@ $EMU /bin/true && pass "qemu runs as ARM1176 ($($EMU --version | head -1))" || {
 echo "== install (install-pizero.sh --no-systemd)"
 cp -r /src /tmp/usb-router
 rm -rf /tmp/usb-router/build /tmp/usb-router/docs
+# a Raspberry Pi OS Bookworm fstab, as the image ships it (the installer must narrow the boot partition)
+mkdir -p /boot/firmware
+printf 'proc            /proc           proc    defaults          0       0\nPARTUUID=4e639091-01  /boot/firmware  vfat    defaults          0       2\nPARTUUID=4e639091-02  /               ext4    defaults,noatime  0       1\n' > /etc/fstab
 if bash /tmp/usb-router/pizero/install-pizero.sh --no-systemd > /tmp/install.log 2>&1; then
   pass "install-pizero.sh"
 else
@@ -80,6 +83,14 @@ kill $COG 2>/dev/null; pkill -f WPEWebProcess; pkill -f WPENetworkProcess; pkill
 echo "== 3b. the browser user is kept away from the manager's secrets"
 id -nG signage | tr ' ' '\n' | grep -qx netdev && fail "signage is in netdev" || pass "signage not in netdev (cannot drive NetworkManager)"
 su signage -s /bin/sh -c "ls /var/lib/usb-router" >/dev/null 2>&1 && fail "signage can list /var/lib/usb-router" || pass "signage cannot read /var/lib/usb-router"
+# the settings file is on FAT (no owners); the installer narrows the mount in fstab. A container cannot
+# mount vfat, so this checks the fstab line and the groups; the mount itself is exercised by fat-mask-test.sh.
+kg=$(getent group kiosk | cut -d: -f3)
+bl=$(awk '$2=="/boot/firmware"' /etc/fstab)
+grep -q "uid=0,gid=$kg,fmask=0137,dmask=0027" <<<"$bl" && [ "$(grep -o 'mask=' <<<"$bl" | wc -l)" -eq 2 ] \
+  && pass "fstab mounts /boot/firmware root:kiosk 0640 ($(awk '{print $4}' <<<"$bl"))" || fail "fstab boot line: $bl"
+[ "$(wc -l < /etc/fstab)" -eq 3 ] && grep -q 'defaults,noatime' /etc/fstab && pass "fstab: other lines kept" || fail "fstab other lines changed"
+id -nG signage | tr ' ' '\n' | grep -qx kiosk && fail "signage is in group kiosk (would read the conf)" || pass "signage not in group kiosk"
 echo "== 4. kiosk controller + headless cog against the live manager"
 : > /tmp/kiosk.log
 su signage -s /bin/sh -c "XDG_RUNTIME_DIR=/tmp/xdg USB_ROUTER_COG_PLATFORM=headless timeout 300 dbus-run-session -- \

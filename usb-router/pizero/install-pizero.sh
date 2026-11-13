@@ -58,6 +58,24 @@ if [ ! -f "$BOOT/usb-router.conf" ] && [ ! -f /etc/usb-router/usb-router.conf ];
   cp "$HERE/config/usb-router.conf.example" "$BOOT/usb-router.conf"
   echo "    wrote $BOOT/usb-router.conf (edit it: homepage, wifi_ssid, fleet_url ...)"
 fi
+# FAT has no file owners: with Pi OS's 'defaults' every user reads usb-router.conf, and it holds the
+# Wi-Fi passwords, the PIN and the fleet token. Mount the boot partition root:kiosk, files 0640, dirs
+# 0750: the manager (kiosk) reads it, signage (the browser, shows third-party pages) cannot.
+KIOSK_GID=$(getent group kiosk | cut -d: -f3)
+if [ -n "$KIOSK_GID" ] && awk -v m="$BOOT" '$2==m && $3=="vfat"{f=1} END{exit !f}' /etc/fstab 2>/dev/null; then
+  awk -v m="$BOOT" -v g="$KIOSK_GID" 'BEGIN{OFS="\t"}
+    $2==m && $3=="vfat" { n=split($4,o,","); s="";
+      for(i=1;i<=n;i++) if(o[i] !~ /^(uid|gid|umask|fmask|dmask)=/) s=s (s==""?"":",") o[i];
+      $4=s (s==""?"":",") "uid=0,gid=" g ",fmask=0137,dmask=0027" } {print}' /etc/fstab > /etc/fstab.usb-router
+  cat /etc/fstab.usb-router > /etc/fstab; rm -f /etc/fstab.usb-router
+  echo "    $BOOT mounts root:kiosk 0640 (fstab), so signage cannot read usb-router.conf"
+  if [ "$SYSTEMD" -eq 1 ] && mountpoint -q "$BOOT"; then
+    systemctl daemon-reload
+    umount "$BOOT" && mount "$BOOT" || echo "warning: remount of $BOOT failed; the new mask applies at next boot"
+  fi
+else
+  echo "warning: no vfat line for $BOOT in /etc/fstab: every user can read $BOOT/usb-router.conf (passwords, PIN, fleet token)"
+fi
 install -m 644 "$HERE/system/usb-router-connect.service" /etc/systemd/system/
 install -d /etc/polkit-1/rules.d /etc/NetworkManager/conf.d
 install -m 644 "$HERE/system/50-usb-router-networkmanager.rules" /etc/polkit-1/rules.d/

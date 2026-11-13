@@ -48,6 +48,10 @@ and `chromium-browser` have no ARMv6 package; `cog` 0.16.1 with WPE WebKit
    card's boot partition, from any computer): `homepage`, `wifi_ssid`,
    `wifi_password`, `fleet_url`, `fleet_token`. The keys are the same as the
    stick's (`config/usb-router.conf.example`).
+   The file holds passwords, so the installer mounts the boot partition
+   root:kiosk with files 0640 (`/etc/fstab`): on the Pi, edit it with `sudo`.
+   The browser user (`signage`) cannot read it. `sudo ./pizero/fat-mask-test.sh`
+   checks that mask on a real vfat mount (any Linux box).
 4. Reboot. The screen shows the setup page, then your content once online.
 
 For a batch: set one card up, then copy the card image to the others. The
