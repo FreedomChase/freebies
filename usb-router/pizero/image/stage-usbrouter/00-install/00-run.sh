@@ -20,3 +20,7 @@ passwd -l "${FIRST_USER_NAME}"
 usermod -s /usr/sbin/nologin "${FIRST_USER_NAME}"
 rm -rf /root/usb-router-src
 CHROOT
+
+# Fail the build if the boot partition lost its mask (S&D 182): usb-router.conf must not be world-readable.
+grep -Eq '^[^#[:space:]]+[[:space:]]+/boot/firmware[[:space:]]+vfat[[:space:]]+[^[:space:]]*fmask=0137[^[:space:]]*dmask=0027' "${ROOTFS_DIR}/etc/fstab" \
+  || { echo "fstab: /boot/firmware has no fmask=0137,dmask=0027"; cat "${ROOTFS_DIR}/etc/fstab"; exit 1; }

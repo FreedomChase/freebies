@@ -38,6 +38,7 @@ cp -r "$SRC/app" "$SRC/pizero" "$SRC/config" "$SRC/system" "$F/"
 rm -rf "$F/pizero/image"
 find "$F" -name __pycache__ -prune -exec rm -rf {} +
 touch "$W/stage2/SKIP_IMAGES"            # export only our image, not plain Lite
+trap 'rm -f "$W/config"' EXIT      # holds the build password: gone when this script ends
 PASS="$(head -c 24 /dev/urandom | base64 | tr -d '/+=')"
 sed "s|@PASS@|$PASS|" "$HERE/pigen-config" > "$W/config"
 unset PASS
