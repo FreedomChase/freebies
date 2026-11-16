@@ -16,7 +16,9 @@ install -d -m 755 /etc/skel/Downloads
 # systemd units / polkit / NetworkManager config
 install -m 644 /opt/usb-router/system/usb-router-connect.service /etc/systemd/system/
 install -m 644 /opt/usb-router/system/config.mount /etc/systemd/system/
-install -m 644 /opt/usb-router/system/50-usb-router-networkmanager.rules /etc/polkit-1/rules.d/
+# 40-, before Debian's pkla compat rule (49-), which refuses outside a session (S&D #191)
+rm -f /etc/polkit-1/rules.d/50-usb-router-networkmanager.rules
+install -m 644 /opt/usb-router/system/40-usb-router-networkmanager.rules /etc/polkit-1/rules.d/
 install -m 644 /opt/usb-router/system/usb-router-networkmanager.conf /etc/NetworkManager/conf.d/usb-router.conf
 
 systemctl enable NetworkManager.service

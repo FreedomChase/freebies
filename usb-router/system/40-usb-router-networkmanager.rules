@@ -1,0 +1,26 @@
+// Let the connection manager (user kiosk, a system service with no login session) drive
+// NetworkManager without a password: scan, connect, create and share the hotspot.
+// Also allow reboot / power-off so the fleet dashboard can restart a screen.
+//
+// Named 40-: polkit runs rules in file-name order and stops at the first answer. Debian's
+// 49-polkit-pkla-compat.rules answers NO for settings.modify.system to netdev outside an
+// active session (network-manager's 10-vendor.d .pkla, ResultAny=no), which is every
+// systemd service. A 50- rule was never reached: 'Insufficient privileges' (S&D #191).
+var USB_ROUTER_NM = [
+    "org.freedesktop.NetworkManager.network-control",
+    "org.freedesktop.NetworkManager.wifi.scan",
+    "org.freedesktop.NetworkManager.wifi.share.protected",
+    "org.freedesktop.NetworkManager.wifi.share.open",
+    "org.freedesktop.NetworkManager.settings.modify.own",
+    "org.freedesktop.NetworkManager.settings.modify.system",
+    "org.freedesktop.NetworkManager.enable-disable-wifi",
+    "org.freedesktop.NetworkManager.enable-disable-network"
+];
+polkit.addRule(function(action, subject) {
+    if (subject.user === "kiosk" && (
+        USB_ROUTER_NM.indexOf(action.id) >= 0 ||
+        action.id.indexOf("org.freedesktop.login1.reboot") === 0 ||
+        action.id.indexOf("org.freedesktop.login1.power-off") === 0)) {
+        return polkit.Result.YES;
+    }
+});

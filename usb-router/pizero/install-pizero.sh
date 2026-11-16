@@ -78,7 +78,9 @@ else
 fi
 install -m 644 "$HERE/system/usb-router-connect.service" /etc/systemd/system/
 install -d /etc/polkit-1/rules.d /etc/NetworkManager/conf.d
-install -m 644 "$HERE/system/50-usb-router-networkmanager.rules" /etc/polkit-1/rules.d/
+# 40-, before Debian's pkla compat rule (49-), which refuses outside a session (S&D #191)
+rm -f /etc/polkit-1/rules.d/50-usb-router-networkmanager.rules
+install -m 644 "$HERE/system/40-usb-router-networkmanager.rules" /etc/polkit-1/rules.d/
 install -m 644 "$HERE/system/usb-router-networkmanager.conf" /etc/NetworkManager/conf.d/usb-router.conf
 [ "$KIOSK" -eq 1 ] && install -m 644 "$HERE/pizero/usb-router-kiosk.service" /etc/systemd/system/
 
