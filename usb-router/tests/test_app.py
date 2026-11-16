@@ -549,3 +549,44 @@ def test_real_hotspot_profile_is_plain_wpa2_without_pmf(monkeypatch):
     assert opts["wifi-sec.pairwise"] == "ccmp" and opts["wifi-sec.group"] == "ccmp"
     assert opts["wifi-sec.pmf"] == "disable"
     assert ("connection", "up", "usb-router-hotspot") in calls
+
+
+def test_password_on_screen_is_the_one_the_hotspot_gets(client, tmp_path):
+    """S&D #191: Shaun's sequence (New hotspot password > Save > Start sharing): the password
+    the screen shows is the one handed to NetworkManager, and it survives an app restart."""
+    srv = client.server
+    given = []
+    real = srv.nm.hotspot_start
+    srv.nm.hotspot_start = lambda iface, ssid, pw, band="bg": (given.append(pw), real(iface, ssid, pw, band))
+    before = client.get("/api/settings").get_json()["settings"]["hotspot_password"]
+    shown = client.post("/api/secrets/rotate", json={"name": "hotspot_password"}).get_json()["settings"]["hotspot_password"]
+    # a configured password (here the env, on a stick usb-router.conf or an earlier Save) wins over
+    # the generated one, so the button changes nothing visible: screen and hotspot still agree
+    assert shown == before == "testpass123"
+    # Save posts the field as it stands (the rotated password)
+    assert client.post("/api/settings", json={"hotspot_ssid": "USB-Router", "hotspot_password": shown,
+                                              "hotspot_band": "bg"}).status_code == 200
+    assert client.post("/api/hotspot", json={"action": "start"}).status_code == 200
+    assert given[-1] == shown
+    assert client.get("/api/status").get_json()["hotspot"]["password"] == shown
+    # a typed password: saved, then used
+    assert client.post("/api/settings", json={"hotspot_password": "ourown-pass-42"}).status_code == 200
+    assert given[-1] == "ourown-pass-42"          # the running hotspot was restarted with it
+    # both live in the state dir, so a restarted app (or reboot) hands NM the same one
+    import json as _json
+    saved = _json.loads((tmp_path / "settings.json").read_text())
+    assert saved["hotspot_password"] == "ourown-pass-42"
+
+
+def test_rotated_password_reaches_the_hotspot_when_none_is_configured(client):
+    srv = client.server
+    srv.cfg.values["hotspot_password"] = ""       # nothing in usb-router.conf, no earlier Save
+    given = []
+    real = srv.nm.hotspot_start
+    srv.nm.hotspot_start = lambda iface, ssid, pw, band="bg": (given.append(pw), real(iface, ssid, pw, band))
+    assert client.post("/api/hotspot", json={"action": "start"}).status_code == 200
+    first = given[-1]
+    shown = client.post("/api/secrets/rotate", json={"name": "hotspot_password"}).get_json()["settings"]["hotspot_password"]
+    assert len(shown) == 12 and shown != first
+    assert given[-1] == shown                      # the running hotspot was re-created with it
+    assert client.get("/api/status").get_json()["hotspot"]["password"] == shown
