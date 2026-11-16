@@ -590,3 +590,14 @@ def test_rotated_password_reaches_the_hotspot_when_none_is_configured(client):
     assert len(shown) == 12 and shown != first
     assert given[-1] == shown                      # the running hotspot was re-created with it
     assert client.get("/api/status").get_json()["hotspot"]["password"] == shown
+
+
+def test_every_element_the_page_script_asks_for_exists(client):
+    """S&D #193: the QR-first setup card renamed elements; a missing id breaks the whole page script."""
+    import re
+    html = client.get("/").get_data(as_text=True)
+    js = open(os.path.join(os.path.dirname(__file__), "..", "app", "static", "app.js")).read()
+    wanted = set(re.findall(r'\$\("([A-Za-z0-9_-]+)"\)', js))
+    have = set(re.findall(r'id="([A-Za-z0-9_-]+)"', html))
+    assert {"setup-card", "setup-phone", "qr-wifi", "qr-ui", "setup-pin"} <= have
+    assert wanted - have == set()

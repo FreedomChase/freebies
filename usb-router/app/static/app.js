@@ -108,23 +108,29 @@
     };
   });
 
-  /* ---------------- phone setup ---------------- */
-  let setupShown = false;
+  /* ---------------- phone setup: QR first (S&D #193) ---------------- */
+  let setupShown = false, phoneScrolled = false;
   const renderSetup = (s) => {
     const h = s.hotspot;
-    const show = !s.online && h.active && h.mode === "wifi";
-    $("setup-card").classList.toggle("hidden", !show);
-    $("setup-phone-note").classList.toggle("hidden", s.local);
-    $("qr-wrap").classList.toggle("hidden", !s.local);
+    // only while unconfigured or during "Allow phone setup" (not a hotspot someone started by hand)
+    const setupMode = h.role === "setup" || !h.configured || !!h.setup_window_until;
+    const show = !s.online && h.active && h.mode === "wifi" && setupMode;
+    $("setup-card").classList.toggle("hidden", !(show && s.local));
+    $("setup-phone").classList.toggle("hidden", !(show && !s.local));
+    document.body.classList.toggle("setup-mode", show && s.local);
     if (show && s.local && !setupShown) {
       setupShown = true;
       $("qr-wifi").src = `/api/qr?kind=wifi&t=${Date.now()}`;
       $("qr-ui").src = `/api/qr?kind=ui&t=${Date.now()}`;
     }
     if (!show) setupShown = false;
+    if (show && !s.local && !phoneScrolled) {
+      phoneScrolled = true;
+      $("setup-phone").scrollIntoView({ block: "start" });   // the line, then the Wi-Fi list right under it
+    }
     $("setup-ssid").textContent = h.ssid || "";
-    $("setup-pass").textContent = s.local ? (h.password || "") : "(shown on the screen)";
-    $("setup-pin").textContent = s.local ? (s.settings.admin_pin || "") : "(shown on the screen)";
+    $("setup-pass").textContent = s.local ? (h.password || "") : "";
+    $("setup-pin").textContent = s.local ? (s.settings.admin_pin || "") : "";
     $("setup-url").textContent = h.ui_url || ""; $("setup-id").textContent = s.device.id;
   };
 

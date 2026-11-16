@@ -22,22 +22,33 @@
 </header>
 
 <main>
-  <!-- Phone-based setup (no keyboard on the screen) -->
-  <section id="setup-card" class="card setup hidden">
+  <!-- Phone-based setup (no keyboard on the screen): QR first (S&D #193) -->
+  <section id="setup-card" class="card setup setup-qr hidden">
+    <figure class="qr-big">
+      <img id="qr-wifi" alt="QR code to join the setup Wi-Fi" width="360" height="360">
+      <figcaption>Scan with your phone camera to join</figcaption>
+    </figure>
     <div class="setup-text">
       <h2>Set this screen up from your phone</h2>
       <ol>
-        <li>Join the Wi-Fi network <strong id="setup-ssid"></strong> with password <strong id="setup-pass"></strong></li>
-        <li>Open <strong id="setup-url"></strong> on your phone</li>
-        <li>Pick the venue's Wi-Fi and enter its password. When asked, type the admin PIN <strong id="setup-pin"></strong>.</li>
-        <li>The screen connects, stops broadcasting, and shows its content.</li>
+        <li>Scan the code with the camera and tap <strong>Join</strong>.<br>
+          <span class="muted">Or join <strong id="setup-ssid"></strong>, password <strong id="setup-pass"></strong></span></li>
+        <li>The setup page opens on the phone by itself. Pick the venue's Wi-Fi.</li>
+        <li>Admin PIN: <strong id="setup-pin" class="pin-big"></strong></li>
       </ol>
-      <p class="hint">Screen ID <code id="setup-id"></code>. Or plug in a keyboard and use this page directly.</p>
-      <p id="setup-phone-note" class="hint hidden">You are on the phone side. The password and PIN are printed on the screen itself, not here.</p>
+      <figure class="qr-small">
+        <img id="qr-ui" alt="QR code for the setup page" width="110" height="110">
+        <figcaption>Page did not open? Scan this, or go to <strong id="setup-url"></strong></figcaption>
+      </figure>
+      <p class="hint">Screen ID <code id="setup-id"></code></p>
     </div>
-    <div class="qr-pair" id="qr-wrap">
-      <figure><img id="qr-wifi" alt="QR code to join the setup Wi-Fi" width="180" height="180"><figcaption>1. Join Wi-Fi</figcaption></figure>
-      <figure><img id="qr-ui" alt="QR code for the setup page" width="180" height="180"><figcaption>2. Open setup page</figcaption></figure>
+  </section>
+
+  <!-- Phone side of the setup hotspot (the captive page lands here) -->
+  <section id="setup-phone" class="banner setup-phone hidden">
+    <div>
+      <strong>You are connected to the screen.</strong>
+      <p>Pick the venue's Wi-Fi below and type its password. The admin PIN is shown on the screen.</p>
     </div>
   </section>
 

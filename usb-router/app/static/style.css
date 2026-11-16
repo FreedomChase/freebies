@@ -108,11 +108,19 @@ code, kbd { background: var(--panel-2); border: 1px solid var(--line); padding: 
   border-color: var(--accent); background: linear-gradient(180deg, rgba(79,140,255,.12), transparent 70%), var(--panel); }
 .setup h2 { font-size: 1.4rem; margin-bottom: 8px; }
 .setup ol { margin: 0; padding-left: 1.3em; font-size: 1.05rem; line-height: 1.6; }
-.qr-pair { display: flex; gap: 20px; flex-shrink: 0; }
-.qr-pair figure { margin: 0; text-align: center; color: var(--muted); font-size: 0.85rem; }
-.qr-pair img { display: block; background: #fff; border-radius: 10px; padding: 6px; width: 180px; height: 180px; margin-bottom: 6px; }
+/* QR-first setup (S&D #193): one big Wi-Fi code, a small fallback code for the page */
+.setup-qr { justify-content: flex-start; gap: 40px; }
+.setup-qr figure { margin: 0; text-align: center; color: var(--muted); }
+.qr-big { flex-shrink: 0; font-size: 1.1rem; }
+.qr-big img { display: block; background: #fff; border-radius: 14px; padding: 10px; margin-bottom: 10px;
+  width: min(54vh, 420px); height: min(54vh, 420px); image-rendering: pixelated; }
+.qr-small { display: flex; gap: 14px; align-items: center; text-align: left !important; margin-top: 18px !important; font-size: 0.9rem; }
+.qr-small img { background: #fff; border-radius: 8px; padding: 4px; width: 110px; height: 110px; image-rendering: pixelated; }
+.pin-big { font-size: 1.6rem; letter-spacing: 0.12em; color: var(--text); }
+body.setup-mode .setup-qr { min-height: calc(100vh - 140px); }
+.setup-phone { border-color: var(--accent); }
 .actions { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-@media (max-width: 900px) { .setup { flex-direction: column; align-items: stretch; } .qr-pair { justify-content: center; } }
+@media (max-width: 900px) { .setup { flex-direction: column; align-items: stretch; } .qr-big { align-self: center; } }
 
 .pin { border-color: var(--warn); }
 .pin-value { font-size: 2.4rem; font-weight: 700; letter-spacing: 0.25em; font-variant-numeric: tabular-nums; padding: 6px 0; }
