@@ -225,8 +225,12 @@ class NetworkManager:
                 "802-11-wireless.mode", "ap", "802-11-wireless.band", band,
                 "ipv4.method", "shared", "ipv6.method", "ignore"]
         if password:
+            # pmf disable: left at default, NetworkManager (1.42) makes a wpa-psk AP WPA2/WPA3
+            # transition mode with PMF optional, which iPhones fail to join on the Pi's
+            # brcmfmac Wi-Fi ("Unable to join the network"). Disabled, it is plain WPA2-PSK (S&D #191).
             args += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password,
-                     "wifi-sec.proto", "rsn", "wifi-sec.pairwise", "ccmp", "wifi-sec.group", "ccmp"]
+                     "wifi-sec.proto", "rsn", "wifi-sec.pairwise", "ccmp", "wifi-sec.group", "ccmp",
+                     "wifi-sec.pmf", "disable"]
         nmcli(*args)
         nmcli("connection", "up", self.HOTSPOT_CON, timeout=45)
 

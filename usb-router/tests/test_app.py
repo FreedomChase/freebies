@@ -531,3 +531,21 @@ def test_no_default_secrets_in_code_or_docs():
     example = open(os.path.join(root, "config", "usb-router.conf.example"), encoding="utf-8").read()
     for key in ("hotspot_password", "admin_pin", "fleet_token", "wifi_password"):
         assert any(line.strip() == f"{key} =" for line in example.splitlines()), key
+
+
+def test_real_hotspot_profile_is_plain_wpa2_without_pmf(monkeypatch):
+    """S&D #191: the profile the real backend creates is WPA2-PSK/CCMP with PMF off (iPhones on brcmfmac)."""
+    for mod in ("netman",):
+        sys.modules.pop(mod, None)
+    netman = importlib.import_module("netman")
+    calls = []
+    monkeypatch.setattr(netman, "nmcli", lambda *a, **k: calls.append(a) or "")
+    netman.NetworkManager().hotspot_start("wlan0", "USB-Router", "testpass123", "bg")
+    add = next(c for c in calls if c[:2] == ("connection", "add"))
+    opts = dict(zip(add[2::2], add[3::2]))
+    assert opts["802-11-wireless.mode"] == "ap"
+    assert opts["wifi-sec.key-mgmt"] == "wpa-psk"
+    assert opts["wifi-sec.proto"] == "rsn"
+    assert opts["wifi-sec.pairwise"] == "ccmp" and opts["wifi-sec.group"] == "ccmp"
+    assert opts["wifi-sec.pmf"] == "disable"
+    assert ("connection", "up", "usb-router-hotspot") in calls
