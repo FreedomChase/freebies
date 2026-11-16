@@ -24,9 +24,10 @@ log = logging.getLogger("usb-router.router")
 
 
 class Router:
-    def __init__(self, backend, config):
+    def __init__(self, backend, config, captive=None):
         self.nm = backend
         self.cfg = config
+        self.captive = captive      # captive.Captive: phones on the setup hotspot get the setup page (S&D #193)
         self.lock = threading.Lock()
         self.last_error = None
         self.auto_disabled = False  # set when the user manually stops the hotspot
@@ -155,6 +156,10 @@ class Router:
             if not chosen:
                 raise NetError("No spare adapter for the hotspot. Plug in a second Wi-Fi adapter or an Ethernet cable.")
             mode = mode or chosen["mode"]
+            if self.captive:
+                # captive portal only when the hotspot has no internet to give
+                offline = role != "share" and self.uplink(devices) is None
+                self.captive.prepare(chosen["iface"] if offline else None)
             try:
                 if mode == "wifi":
                     if not chosen["ap_capable"]:
@@ -182,6 +187,8 @@ class Router:
                 else:
                     self.nm.hotspot_stop()
             self.role = None
+            if self.captive and self.captive.active:
+                self.captive.prepare(None)
             if manual:
                 self.auto_disabled = True
             return self.status()

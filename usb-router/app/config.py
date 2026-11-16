@@ -45,6 +45,7 @@ DEFAULTS = {
     "listen_host": "127.0.0.1",
     "listen_port": "8080",
     "lan_access": "true",             # serve the UI on the hotspot side too (phone-based setup)
+    "captive_portal": "true",         # phones on the setup hotspot open the setup page by themselves (S&D #193)
     "admin_pin": "",                  # blank = a random 6-digit PIN is generated per stick and shown on screen only
     "check_url": "http://connectivitycheck.gstatic.com/generate_204",
     "check_fallback_url": "http://detectportal.firefox.com/success.txt",

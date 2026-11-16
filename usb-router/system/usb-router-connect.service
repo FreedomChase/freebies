@@ -11,6 +11,12 @@ Environment=PYTHONUNBUFFERED=1
 Environment=USB_ROUTER_STATE_DIR=/var/lib/usb-router
 ExecStartPre=+/bin/mkdir -p /var/lib/usb-router
 ExecStartPre=+/bin/chown kiosk:netdev /var/lib/usb-router
+# captive portal (S&D #193): dnsmasq reads this file through the link in
+# /etc/NetworkManager/dnsmasq-shared.d, so it must exist before any hotspot
+ExecStartPre=+/bin/sh -c 'f=/var/lib/usb-router/captive-dns.conf; [ -e "$f" ] || : > "$f"; chown kiosk:netdev "$f"; chmod 644 "$f"'
+# port 80 for the captive-portal redirect, nothing else
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 ExecStart=/usr/bin/python3 /opt/usb-router/app/server.py
 Restart=always
 RestartSec=2

@@ -40,6 +40,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask, abort, jsonify, render_template, request, send_file  # noqa: E402
 
+from captive import Captive  # noqa: E402
 from config import Config  # noqa: E402
 from fleet_client import FleetClient  # noqa: E402
 from netman import NetError, get_backend, internet_check  # noqa: E402
@@ -56,7 +57,8 @@ log = logging.getLogger("usb-router")
 cfg = Config()
 MOCK = cfg.flag("mock") or os.environ.get("USB_ROUTER_MOCK") == "1"
 nm = get_backend(MOCK)
-router = Router(nm, cfg)
+captive = Captive(cfg.get("listen_port"))
+router = Router(nm, cfg, captive=captive)
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.config["JSON_SORT_KEYS"] = False
@@ -578,6 +580,8 @@ def main():
         host = "0.0.0.0"
     port = int(cfg.get("listen_port"))
     provision_wifi()
+    if cfg.flag("lan_access") and cfg.flag("captive_portal") and not MOCK:
+        captive.start_listener()
     router.run_keeper(is_online)
     fleet.run()
     log.info("device %s; hotspot password: %s; admin PIN: %s (both shown on the screen's own page)",

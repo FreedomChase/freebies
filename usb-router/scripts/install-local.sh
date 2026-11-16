@@ -33,6 +33,12 @@ install -m 644 "$HERE/system/config.mount" /etc/systemd/system/
 rm -f /etc/polkit-1/rules.d/50-usb-router-networkmanager.rules
 install -m 644 "$HERE/system/40-usb-router-networkmanager.rules" /etc/polkit-1/rules.d/
 install -m 644 "$HERE/system/usb-router-networkmanager.conf" /etc/NetworkManager/conf.d/usb-router.conf
+# captive portal (S&D #193): NetworkManager's hotspot dnsmasq reads the app's file through this link
+install -d /etc/NetworkManager/dnsmasq-shared.d
+[ -e /var/lib/usb-router/captive-dns.conf ] || : > /var/lib/usb-router/captive-dns.conf
+chown kiosk:netdev /var/lib/usb-router/captive-dns.conf 2>/dev/null || true
+chmod 644 /var/lib/usb-router/captive-dns.conf
+ln -sfn /var/lib/usb-router/captive-dns.conf /etc/NetworkManager/dnsmasq-shared.d/usb-router-captive.conf
 install -m 644 -o kiosk -g kiosk "$HERE/scripts/bash_profile" /home/kiosk/.bash_profile
 
 echo "==> services"

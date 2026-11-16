@@ -19,7 +19,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("USB_ROUTER_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("USB_ROUTER_HOTSPOT_PASSWORD", "testpass123")
     monkeypatch.setenv("USB_ROUTER_ADMIN_PIN", "246810")
-    for mod in ("server", "config", "netman", "router", "fleet_client"):
+    for mod in ("server", "config", "netman", "router", "fleet_client", "captive"):
         sys.modules.pop(mod, None)
     server = importlib.import_module("server")
     server.app.config["TESTING"] = True
@@ -202,7 +202,7 @@ def test_provisioned_wifi_profiles_created(tmp_path, monkeypatch):
     monkeypatch.setenv("USB_ROUTER_WIFI_SSID", "Venue-Staff")
     monkeypatch.setenv("USB_ROUTER_WIFI_PASSWORD", "venuepass1")
     monkeypatch.setenv("USB_ROUTER_WIFI_SSID_2", "Home WiFi")  # already saved -> not re-created
-    for mod in ("server", "config", "netman", "router", "fleet_client"):
+    for mod in ("server", "config", "netman", "router", "fleet_client", "captive"):
         sys.modules.pop(mod, None)
     server = importlib.import_module("server")
     server.provision_wifi()
