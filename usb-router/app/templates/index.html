@@ -22,6 +22,18 @@
 </header>
 
 <main>
+  <!-- Phone side: the PIN comes before anything else (S&D #193) -->
+  <section id="pin-gate" class="card pin-gate hidden" aria-labelledby="pin-gate-title">
+    <h2 id="pin-gate-title">Enter the admin PIN</h2>
+    <p class="muted">This screen is locked. Type the admin PIN to set it up.</p>
+    <form id="pin-gate-form" autocomplete="off">
+      <input id="pin-gate-input" class="input pin-input" type="password" inputmode="numeric" pattern="[0-9]*"
+             autocomplete="one-time-code" placeholder="PIN" aria-label="Admin PIN" required>
+      <button type="submit" id="pin-gate-go" class="btn btn-primary">Unlock</button>
+    </form>
+    <p id="pin-gate-msg" class="pin-gate-msg" role="alert"></p>
+  </section>
+
   <!-- Phone-based setup (no keyboard on the screen): QR first (S&D #193) -->
   <section id="setup-card" class="card setup setup-qr hidden">
     <figure class="qr-big">
@@ -32,9 +44,9 @@
       <h2>Set this screen up from your phone</h2>
       <ol>
         <li>Scan the code with the camera and tap <strong>Join</strong>.<br>
-          <span class="muted">Or join <strong id="setup-ssid"></strong>, password <strong id="setup-pass"></strong></span></li>
-        <li>The setup page opens on the phone by itself. Pick the venue's Wi-Fi.</li>
-        <li>Admin PIN: <strong id="setup-pin" class="pin-big"></strong></li>
+          <span class="muted">The Wi-Fi is called <strong id="setup-ssid"></strong>.</span></li>
+        <li>The phone opens the setup page by itself and asks for the admin PIN<span id="setup-pin-wrap" class="hidden">: <strong id="setup-pin" class="pin-big"></strong></span>.</li>
+        <li>Pick the venue's Wi-Fi.</li>
       </ol>
       <figure class="qr-small">
         <img id="qr-ui" alt="QR code for the setup page" width="110" height="110">
@@ -48,7 +60,7 @@
   <section id="setup-phone" class="banner setup-phone hidden">
     <div>
       <strong>You are connected to the screen.</strong>
-      <p>Pick the venue's Wi-Fi below and type its password. The admin PIN is shown on the screen.</p>
+      <p>Pick the venue's Wi-Fi below and type its password.</p>
     </div>
   </section>
 
@@ -127,7 +139,7 @@
         <label class="field"><span>Network name</span>
           <input id="hs-ssid" class="input" type="text" maxlength="32"></label>
         <label class="field"><span>Password <em id="hs-pass-source" class="muted"></em></span>
-          <input id="hs-pass" class="input" type="text" minlength="8" maxlength="63"></label>
+          <input id="hs-pass" class="input" type="password" minlength="8" maxlength="63" autocomplete="new-password"></label>
         <label class="field"><span>Band</span>
           <select id="hs-band" class="input">
             <option value="bg">2.4 GHz (most compatible)</option>
@@ -152,7 +164,7 @@
     <section class="card pin hidden" id="pin-card">
       <div class="card-head"><h2>Admin PIN</h2><span class="tag" id="pin-source"></span></div>
       <div class="pin-value" id="pin-value"></div>
-      <p class="hint">Every change to this screen, from here or from a phone on its hotspot, needs this PIN. It is only ever shown on this screen.</p>
+      <p class="hint" id="pin-hint">Every change to this screen, from here or from a phone on its hotspot, needs this PIN. It is only ever shown on this screen.</p>
       <p id="setup-window-note" class="muted"></p>
       <div class="row wrap">
         <button id="setup-open" class="btn">Allow phone setup for 15 min</button>

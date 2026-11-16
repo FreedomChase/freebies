@@ -42,11 +42,14 @@ what it shows.
 
 **2. From a phone (screen mounted, no keyboard).** With no Wi-Fi configured
 the screen shows two QR codes after about 25 seconds offline: scan the first to
-join its setup hotspot, the second to open its setup page. Pick the venue Wi-Fi,
-type its password and, when asked, the 6-digit admin PIN printed on the screen.
+join its setup hotspot, the second to open its setup page. The phone asks for
+the admin PIN first, then shows the venue Wi-Fi list: pick one and type its password.
 The screen connects, the setup hotspot switches off, and the content starts.
-The hotspot password and PIN are unique to each stick, generated at first boot,
-and shown only on the screen itself.
+The hotspot password is unique to each stick, generated at first boot, and is on
+the screen only inside the first QR code, never as text (S&D #193). The admin PIN
+is the image's default PIN (`/etc/usb-router/default-pin`, baked in at build from
+the vault, never shown) or, without one, a PIN generated per stick and shown on
+the screen. **New PIN** on the screen gives that box its own PIN, shown there.
 
 ![Phone-based setup screen with QR codes](docs/setup-page.png)
 
@@ -162,7 +165,7 @@ All keys are in `config/usb-router.conf.example`. The important ones:
 | `wifi_ssid[_2,_3]`, `wifi_password[_2,_3]` | empty | Zero-touch Wi-Fi profiles created at boot |
 | `setup_hotspot` | `true` | Broadcast while offline and unconfigured so a phone can set the screen up |
 | `hotspot_password` | blank = generated per stick | Hotspot password. Weak values (`changeme…`, `password`, `12345678`) are refused |
-| `admin_pin` | blank = generated per stick | 6-digit PIN required for every change; shown on the screen only |
+| `admin_pin` | blank = image default PIN, else generated per stick | PIN required for every change; a generated or New PIN is shown on the screen only, the default never |
 | `hotspot_enabled`, `hotspot_ssid`, `hotspot_band` | `false`, `USB-Router`, `bg` | Share the connection with nearby devices once online (opt-in) |
 | `lan_access` | `true` | Serve the setup page to hotspot clients (PIN still required) |
 | `fleet_url`, `fleet_token`, `fleet_interval` | empty, empty, 60 | Fleet dashboard. No token = the client stays off |
@@ -195,8 +198,8 @@ The browser, the page and the dashboard all use the same JSON API on port 8080.
 
 Every POST except the browser's own `report` needs the `X-Admin-Pin` header,
 from the screen and from the hotspot side alike. The screen's own page fills it
-in automatically (the server reveals the PIN to loopback only); a phone is
-prompted for the PIN printed on the screen. Five wrong PINs lock that address
+in automatically (the server reveals the PIN to loopback only); a phone gets a
+PIN screen before anything else (`POST /api/pin/check`). Five wrong PINs lock that address
 out with an escalating delay. `lan_access = false` refuses the LAN side entirely.
 
 ## Browser keyboard shortcuts
@@ -217,8 +220,9 @@ out with an escalating delay. `lan_access = false` refuses the LAN side entirely
 
 - The web app runs as the unprivileged `kiosk` user and controls NetworkManager
   and reboot/power-off through polkit rules for the `netdev` group, nothing else.
-- There are no shared default secrets. Each stick generates its own hotspot
-  password and admin PIN at first boot (stored root-readable in
+- The one shared secret is the optional default admin PIN baked into the image
+  (S&D #193, owner's call), never shown on any screen. Each stick generates its own hotspot
+  password (and admin PIN, when the image has no default) at first boot (stored root-readable in
   `/var/lib/usb-router/secrets.json` on the persistence partition) and shows
   them only on its own screen. If you set your own in `usb-router.conf`, use
   8+ character passwords; common defaults are refused.

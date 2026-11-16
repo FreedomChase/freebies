@@ -195,7 +195,7 @@ def admin_required(fn):
         given = request.headers.get("X-Admin-Pin", "")
         if not pin_valid(given):
             lock = _pin_failed(addr) if given else 0
-            msg = "Admin PIN required (it is shown on the screen)" if not given else "Wrong admin PIN"
+            msg = "Admin PIN required" if not given else "Wrong admin PIN"
             if lock:
                 msg += f"; locked for {lock} s"
             return jsonify({"ok": False, "error": msg, "pin_required": True}), 401
@@ -476,6 +476,13 @@ def api_setup_mode():
     return jsonify({"ok": True, "hotspot": router.status(run_check()["online"], local=True)})
 
 
+@app.post("/api/pin/check")
+@admin_required
+def api_pin_check():
+    """The phone's PIN gate (S&D #193): 200 when X-Admin-Pin is right; same lockout as every change."""
+    return jsonify({"ok": True})
+
+
 @app.post("/api/secrets/rotate")
 @admin_required
 def api_secrets_rotate():
@@ -584,8 +591,8 @@ def main():
         captive.start_listener()
     router.run_keeper(is_online)
     fleet.run()
-    log.info("device %s; hotspot password: %s; admin PIN: %s (both shown on the screen's own page)",
-             cfg.device_id(), cfg.hotspot_password_source(), "from config" if cfg.get("admin_pin").strip() else "generated")
+    log.info("device %s; hotspot password: %s (in the screen's QR only); admin PIN: %s",
+             cfg.device_id(), cfg.hotspot_password_source(), cfg.admin_pin_source())
     log.info("USB Router connection manager on http://%s:%s (backend=%s)", host, port, nm.name)
     app.run(host=host, port=port, debug=False, threaded=True)
 

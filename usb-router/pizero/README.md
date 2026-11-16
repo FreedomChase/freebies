@@ -55,9 +55,10 @@ and `chromium-browser` have no ARMv6 package; `cog` 0.16.1 with WPE WebKit
 4. Reboot. The screen shows the setup page, then your content once online.
 
 For a batch: set one card up, then copy the card image to the others. The
-admin PIN and the hotspot password are generated at first boot and kept in
-`/var/lib/usb-router/secrets.json`, so **delete that file before you copy the
-image**, or every screen gets the same PIN and password.
+hotspot password (and the admin PIN when the image has no default PIN) are
+generated at first boot and kept in `/var/lib/usb-router/secrets.json`, so
+**delete that file before you copy the image**, or every screen gets the same
+password. The default PIN in `/etc/usb-router/default-pin` is meant to be shared.
 
 Options: `--no-kiosk` installs the connection manager only (no screen);
 `--no-systemd` installs files and packages only (image builds, the container test).

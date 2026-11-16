@@ -10,7 +10,7 @@
   try { adminPin = sessionStorage.getItem("adminPin") || ""; } catch (_) { /* private mode */ }
   const rememberPin = (pin) => { adminPin = pin; try { sessionStorage.setItem("adminPin", pin); } catch (_) { /* ignore */ } };
   const askPin = () => {
-    const pin = prompt("Enter the 6-digit admin PIN shown on the screen's setup page:");
+    const pin = prompt("Enter the admin PIN:");
     if (pin && pin.trim()) { rememberPin(pin.trim()); return true; }
     return false;
   };
@@ -59,6 +59,7 @@
     $("online-homepage").textContent = s.settings.resolved_homepage;
     $("device-label").textContent = (s.device.name ? `${s.device.name} · ` : "") + s.device.id;
     if (s.local && s.settings.admin_pin) rememberPin(s.settings.admin_pin);
+    renderGate(s);
     renderPin(s);
     renderSetup(s);
     renderFleet(s);
@@ -79,13 +80,54 @@
     }
   };
 
+  /* ---------------- PIN gate: a phone types the PIN before anything else (S&D #193) ---------------- */
+  let pinVerified = false, gateChecking = false;
+  const checkPin = async (pin) => {
+    const res = await fetch("/api/pin/check", { method: "POST", headers: { "Content-Type": "application/json", "X-Admin-Pin": pin } });
+    let data = {};
+    try { data = await res.json(); } catch (_) { /* ignore */ }
+    return { ok: res.ok && data.ok !== false, error: data.error || `Request failed (${res.status})` };
+  };
+  const setGate = (on) => {
+    $("pin-gate").classList.toggle("hidden", !on);
+    document.body.classList.toggle("pin-locked", on);
+    if (on) setTimeout(() => $("pin-gate-input").focus(), 50);
+  };
+  const renderGate = async (s) => {
+    if (s.local || pinVerified) { setGate(false); return; }
+    if (gateChecking) return;
+    if (adminPin) {            // a PIN from earlier in this tab: check it quietly first
+      gateChecking = true;
+      const r = await checkPin(adminPin).catch(() => ({ ok: false }));
+      gateChecking = false;
+      if (r.ok) { pinVerified = true; setGate(false); return; }
+      rememberPin("");
+    }
+    setGate(true);
+  };
+  $("pin-gate-form").onsubmit = async (ev) => {
+    ev.preventDefault();
+    const pin = $("pin-gate-input").value.trim();
+    if (!pin) return;
+    busy($("pin-gate-go"), true);
+    const r = await checkPin(pin).catch((e) => ({ ok: false, error: e.message }));
+    busy($("pin-gate-go"), false);
+    if (r.ok) { rememberPin(pin); pinVerified = true; $("pin-gate-msg").textContent = ""; setGate(false); refreshStatus(true); }
+    else { $("pin-gate-msg").textContent = r.error; $("pin-gate-input").value = ""; $("pin-gate-input").focus(); }
+  };
+
   /* ---------------- admin PIN panel (screen only) ---------------- */
   const renderPin = (s) => {
     const box = $("pin-card");
     if (!s.local) { box.classList.add("hidden"); return; }
     box.classList.remove("hidden");
-    $("pin-value").textContent = s.settings.admin_pin || "";
-    $("pin-source").textContent = s.settings.admin_pin_source === "config" ? "set in usb-router.conf" : "generated for this stick";
+    const isDefault = s.settings.admin_pin_source === "default";   // the shared default PIN is never displayed
+    $("pin-value").textContent = isDefault ? "Default PIN" : (s.settings.admin_pin || "");
+    $("pin-source").textContent = { config: "set in usb-router.conf", new: "new PIN for this screen",
+      default: "same on every screen, not shown", generated: "generated for this stick" }[s.settings.admin_pin_source] || "";
+    $("pin-hint").textContent = isDefault
+      ? "Every change to this screen, from here or from a phone on its hotspot, needs the default admin PIN. New PIN gives this screen its own PIN, shown here."
+      : "Every change to this screen, from here or from a phone on its hotspot, needs this PIN. It is only ever shown on this screen.";
     $("hs-pass-source").textContent = s.settings.hotspot_password_source === "config" ? "" : `(${s.settings.hotspot_password_source})`;
     const h = s.hotspot;
     $("setup-open").classList.toggle("hidden", !!h.setup_window_until || s.online);
@@ -129,8 +171,10 @@
       $("setup-phone").scrollIntoView({ block: "start" });   // the line, then the Wi-Fi list right under it
     }
     $("setup-ssid").textContent = h.ssid || "";
-    $("setup-pass").textContent = s.local ? (h.password || "") : "";
-    $("setup-pin").textContent = s.local ? (s.settings.admin_pin || "") : "";
+    // no hotspot password in text anywhere (Shaun, 17 Nov): the QR carries it
+    const showPin = s.local && s.settings.admin_pin_source !== "default" && !!s.settings.admin_pin;
+    $("setup-pin-wrap").classList.toggle("hidden", !showPin);
+    $("setup-pin").textContent = showPin ? s.settings.admin_pin : "";
     $("setup-url").textContent = h.ui_url || ""; $("setup-id").textContent = s.device.id;
   };
 
@@ -327,8 +371,8 @@
 
   /* ---------------- settings ---------------- */
   const fillSettings = (s) => {
-    $("hs-ssid").value = s.hotspot_ssid; $("hs-pass").value = s.hotspot_password || ""; $("hs-band").value = s.hotspot_band;
-    $("hs-pass").placeholder = s.hotspot_password ? "" : "(shown on the screen; blank keeps it)";
+    $("hs-ssid").value = s.hotspot_ssid; $("hs-pass").value = ""; $("hs-band").value = s.hotspot_band;
+    $("hs-pass").placeholder = "(unchanged; blank keeps it)";   // never shown in text (S&D #193)
     $("hotspot-enabled").checked = s.hotspot_enabled; $("setup-hotspot").checked = s.setup_hotspot;
     $("set-homepage").value = s.homepage; $("set-kiosk").checked = s.kiosk; $("set-exit").checked = s.allow_exit;
     $("set-name").value = s.device_name; $("set-rotation").value = s.rotation; $("set-reload").value = s.reload_every;

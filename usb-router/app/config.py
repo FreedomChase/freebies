@@ -46,11 +46,15 @@ DEFAULTS = {
     "listen_port": "8080",
     "lan_access": "true",             # serve the UI on the hotspot side too (phone-based setup)
     "captive_portal": "true",         # phones on the setup hotspot open the setup page by themselves (S&D #193)
-    "admin_pin": "",                  # blank = a random 6-digit PIN is generated per stick and shown on screen only
+    "admin_pin": "",                  # blank = the image's default PIN (DEFAULT_PIN_PATHS), else a random 6-digit PIN per stick
     "check_url": "http://connectivitycheck.gstatic.com/generate_204",
     "check_fallback_url": "http://detectportal.firefox.com/success.txt",
     "mock": "false",                  # true = fake nmcli (for development on a laptop/CI)
 }
+
+# One default PIN for every box, written at image build from the node vault
+# (DISPLAY_PLAYER_DEFAULT_PIN, S&D #193). Never in git. A per-box New PIN overrides it.
+DEFAULT_PIN_PATHS = ["/etc/usb-router/default-pin"]
 
 CONF_PATHS = [
     "/etc/usb-router/usb-router.conf",
@@ -176,15 +180,42 @@ class Config:
             return "config"
         return "generated" if not configured else "generated (configured value is too weak)"
 
+    def default_pin(self) -> str:
+        """The image's shared default PIN, or "" when the image has none."""
+        extra = os.environ.get("USB_ROUTER_DEFAULT_PIN_FILE")
+        for path in ([extra] if extra else []) + DEFAULT_PIN_PATHS:
+            try:
+                pin = Path(path).read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            if pin.isdigit() and len(pin) >= 6:
+                return pin
+        return ""
+
+    def admin_pin_source(self) -> str:
+        """config (usb-router.conf) > new (New PIN on this box) > default (image) > generated."""
+        if self.get("admin_pin").strip():
+            return "config"
+        if self.secrets.get("admin_pin_new") == "1":
+            return "new"
+        if self.default_pin():
+            return "default"
+        return "generated"
+
     def admin_pin(self) -> str:
-        configured = self.get("admin_pin").strip()
-        return configured if configured else self.secrets["admin_pin"]
+        source = self.admin_pin_source()
+        if source == "config":
+            return self.get("admin_pin").strip()
+        if source == "default":
+            return self.default_pin()
+        return self.secrets["admin_pin"]
 
     def rotate_secret(self, name: str):
         if name == "hotspot_password":
             self.secrets[name] = generate_password()
         elif name == "admin_pin":
             self.secrets[name] = generate_pin()
+            self.secrets["admin_pin_new"] = "1"   # this box now has its own PIN, not the default
         else:
             raise ValueError("unknown secret")
         self._write_secrets()
@@ -308,6 +339,8 @@ class Config:
             "hotspot_password_source": self.hotspot_password_source(),
             "hotspot_band": self.get("hotspot_band"),
             "lan_access": self.flag("lan_access"),
+            # to the screen's own page only, which sends it as X-Admin-Pin (a page in the kiosk browser cannot
+            # read this cross-origin). The page does not DISPLAY it when the source is "default" (S&D #193).
             "admin_pin": self.admin_pin() if local else None,
-            "admin_pin_source": "config" if self.get("admin_pin").strip() else "generated",
+            "admin_pin_source": self.admin_pin_source(),
         }

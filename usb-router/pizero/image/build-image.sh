@@ -2,7 +2,11 @@
 # Build the flashable Pi Zero W image with pi-gen, on an arm64 Debian 12 box.
 # armhf runs natively on arm64 (Neoverse N1 has AArch32), so no qemu is needed.
 #
-#   sudo ./pizero/image/build-image.sh <out dir>
+#   sudo DEFAULT_PIN_FILE=<file> ./pizero/image/build-image.sh <out dir>
+#
+# DEFAULT_PIN_FILE (optional, S&D #193): a file holding the one default admin PIN for every
+# box, read from the node vault (DISPLAY_PLAYER_DEFAULT_PIN) by whoever runs the build.
+# It lands in the image as /etc/usb-router/default-pin (root:kiosk 0640). Never in git.
 #
 # Output: <out dir>/*-usbrouter.img.xz, its .sha256, and build.log.
 set -euo pipefail
@@ -38,7 +42,14 @@ cp -r "$SRC/app" "$SRC/pizero" "$SRC/config" "$SRC/system" "$F/"
 rm -rf "$F/pizero/image"
 find "$F" -name __pycache__ -prune -exec rm -rf {} +
 touch "$W/stage2/SKIP_IMAGES"            # export only our image, not plain Lite
-trap 'rm -f "$W/config"' EXIT      # holds the build password: gone when this script ends
+PINF="$W/stage-usbrouter/00-install/files/default-pin"
+trap 'rm -f "$W/config" "$PINF"' EXIT      # build password and default PIN: gone when this script ends
+if [ -n "${DEFAULT_PIN_FILE:-}" ]; then
+  grep -Eqx '[0-9]{6,}' "$DEFAULT_PIN_FILE" || { echo "DEFAULT_PIN_FILE: not a PIN of 6+ digits"; exit 1; }
+  install -m 0600 "$DEFAULT_PIN_FILE" "$PINF"
+else
+  echo "==> no DEFAULT_PIN_FILE: each box generates its own PIN"
+fi
 PASS="$(head -c 24 /dev/urandom | base64 | tr -d '/+=')"
 sed "s|@PASS@|$PASS|" "$HERE/pigen-config" > "$W/config"
 unset PASS

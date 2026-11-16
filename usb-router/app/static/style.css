@@ -130,3 +130,11 @@ body.unavail { background: #0e1116; color: #e8ecf2; align-items: center; justify
 .unavail-box { padding: 24px; max-width: 90vw; }
 .unavail-title { font-size: 2rem; font-weight: 600; margin-bottom: 0.75rem; }
 .unavail-url, .unavail-detail { color: #93a0b4; font-size: 1.1rem; word-break: break-all; }
+
+/* PIN gate: on a phone the PIN comes before anything else (S&D #193) */
+body.pin-locked main > :not(#pin-gate) { display: none !important; }
+.pin-gate { max-width: 420px; margin: 24px auto; text-align: center; }
+.pin-gate form { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.pin-gate .pin-input { font-size: 1.6rem; letter-spacing: 0.2em; text-align: center; min-height: 56px; }
+.pin-gate .btn { min-height: 52px; font-size: 1.1rem; }
+.pin-gate-msg { min-height: 1.4em; margin-top: 12px; color: var(--bad); }

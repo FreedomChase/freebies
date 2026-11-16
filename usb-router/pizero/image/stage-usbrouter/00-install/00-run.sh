@@ -4,6 +4,9 @@
 # Not /tmp: on_chroot mounts a fresh tmpfs over the chroot's /tmp.
 rm -rf "${ROOTFS_DIR}/root/usb-router-src"
 cp -r files/usb-router "${ROOTFS_DIR}/root/usb-router-src"
+# the one default admin PIN (S&D #193), only when build-image.sh was given DEFAULT_PIN_FILE
+rm -f "${ROOTFS_DIR}/root/usb-router-default-pin"
+if [ -f files/default-pin ]; then install -m 0600 files/default-pin "${ROOTFS_DIR}/root/usb-router-default-pin"; fi
 
 on_chroot <<CHROOT
 set -e
@@ -18,6 +21,10 @@ systemctl disable getty@tty1.service 2>/dev/null || true
 # Settings are changed in usb-router.conf on the boot partition, from any computer.
 passwd -l "${FIRST_USER_NAME}"
 usermod -s /usr/sbin/nologin "${FIRST_USER_NAME}"
+if [ -f /root/usb-router-default-pin ]; then
+  install -D -m 0640 -o root -g kiosk /root/usb-router-default-pin /etc/usb-router/default-pin
+  rm -f /root/usb-router-default-pin
+fi
 rm -rf /root/usb-router-src
 CHROOT
 

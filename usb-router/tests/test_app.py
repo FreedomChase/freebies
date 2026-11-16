@@ -599,5 +599,64 @@ def test_every_element_the_page_script_asks_for_exists(client):
     js = open(os.path.join(os.path.dirname(__file__), "..", "app", "static", "app.js")).read()
     wanted = set(re.findall(r'\$\("([A-Za-z0-9_-]+)"\)', js))
     have = set(re.findall(r'id="([A-Za-z0-9_-]+)"', html))
-    assert {"setup-card", "setup-phone", "qr-wifi", "qr-ui", "setup-pin"} <= have
+    assert {"setup-card", "setup-phone", "qr-wifi", "qr-ui", "setup-pin", "pin-gate"} <= have
     assert wanted - have == set()
+
+
+def test_pin_check_is_the_phone_gate(client):
+    """S&D #193: a phone on the hotspot types the PIN first; /api/pin/check says yes or no, with the lockout."""
+    remote = {"REMOTE_ADDR": "10.42.0.50"}
+    assert client.post("/api/pin/check", environ_base=remote, no_pin=True).status_code == 401
+    assert client.post("/api/pin/check", environ_base=remote, headers={"X-Admin-Pin": "000000"}).status_code == 401
+    assert client.post("/api/pin/check", environ_base=remote).get_json()["ok"] is True
+    html = client.get("/", environ_base=remote).get_data(as_text=True)
+    assert 'id="pin-gate"' in html and 'id="pin-gate-input"' in html
+
+
+def test_default_pin_from_the_image(tmp_path, monkeypatch):
+    """S&D #193: one default PIN baked into the image; usb-router.conf beats it; New PIN beats it; never shown."""
+    pin_file = tmp_path / "default-pin"
+    pin_file.write_text("1234567890123456\n")
+    monkeypatch.setenv("USB_ROUTER_MOCK", "1")
+    monkeypatch.setenv("USB_ROUTER_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("USB_ROUTER_DEFAULT_PIN_FILE", str(pin_file))
+    monkeypatch.delenv("USB_ROUTER_ADMIN_PIN", raising=False)
+    for mod in ("server", "config", "netman", "router", "fleet_client", "captive"):
+        sys.modules.pop(mod, None)
+    server = importlib.import_module("server")
+    server._pin_failures.clear()
+    cfg = server.cfg
+    cfg.values["admin_pin"] = ""                       # a usb-router.conf on this machine must not decide the test
+    assert cfg.admin_pin_source() == "default" and cfg.admin_pin() == "1234567890123456"
+    with server.app.test_client() as c:
+        remote = {"REMOTE_ADDR": "10.42.0.51"}
+        assert c.post("/api/pin/check", environ_base=remote, headers={"X-Admin-Pin": "1234567890123456"}).status_code == 200
+        st = c.get("/api/status").get_json()
+        assert st["settings"]["admin_pin_source"] == "default"
+        assert c.get("/api/status", environ_base=remote).get_json()["settings"]["admin_pin"] is None
+        # New PIN on this box replaces the default, and survives a restart (secrets.json)
+        r = c.post("/api/secrets/rotate", json={"name": "admin_pin"}, headers={"X-Admin-Pin": "1234567890123456"})
+        new = r.get_json()["settings"]["admin_pin"]
+        assert len(new) == 6 and new != "1234567890123456"
+        assert c.post("/api/pin/check", environ_base=remote, headers={"X-Admin-Pin": "1234567890123456"}).status_code == 401
+        assert c.post("/api/pin/check", environ_base=remote, headers={"X-Admin-Pin": new}).status_code == 200
+    import config as config_mod
+    again = config_mod.Config()
+    again.values["admin_pin"] = ""
+    assert again.admin_pin_source() == "new" and again.admin_pin() == new
+    # a weak or empty default file is ignored: back to the per-stick generated PIN
+    pin_file.write_text("12a\n")
+    fresh_state = tmp_path / "state2"
+    monkeypatch.setenv("USB_ROUTER_STATE_DIR", str(fresh_state))
+    other = config_mod.Config()
+    other.values["admin_pin"] = ""
+    assert other.admin_pin_source() == "generated" and len(other.admin_pin()) == 6
+
+
+def test_no_hotspot_password_text_on_the_page(client):
+    """Shaun, 17 Nov: the hotspot password is in the QR only, never in text on the screen."""
+    html = client.get("/").get_data(as_text=True)
+    js = open(os.path.join(os.path.dirname(__file__), "..", "app", "static", "app.js")).read()
+    assert 'id="setup-pass"' not in html and "setup-pass" not in js
+    assert "h.password" not in js and "s.hotspot_password ||" not in js
+    assert 'id="hs-pass" class="input" type="password"' in html
