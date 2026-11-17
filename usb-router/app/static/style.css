@@ -238,3 +238,12 @@ body.powering-off main > #power-off:not(.hidden) { display: flex !important; }
 .boot-splash.gone .boot-logo { animation: none; }
 @keyframes boot-pulse { from { opacity: .55; } to { opacity: 1; } }
 body.splash-still .boot-logo { animation: none; }
+
+/* venue join progress and result (C&G #209 v8.3) */
+.join-banner { display: block; font-size: 1.25rem; }
+.join-banner.hidden, .join-line.hidden, .drop-note.hidden { display: none; }
+.join-banner.bad, .join-line.bad { border-color: var(--bad, #e5484d); }
+.join-line { margin-top: 1.2em; padding: 0.7em 0.9em; border-left: 4px solid var(--bad, #e5484d); border-radius: 6px;
+  background: rgba(229, 72, 77, 0.12); font-size: 1.05em; line-height: 1.35; }
+body.setup-mode .join-line { font-size: clamp(1.1rem, 1.6vw, 1.5rem); max-width: 40ch; }
+.drop-note { margin: 0.8em 0; padding: 0.8em 0.9em; border-radius: 8px; background: rgba(255, 255, 255, 0.08); line-height: 1.4; }

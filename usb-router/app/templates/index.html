@@ -60,6 +60,7 @@
         <li>The phone opens the setup page by itself and asks for the admin PIN.<span id="setup-pin-wrap" class="hidden"> <strong id="setup-pin" class="pin-big"></strong></span></li>
         <li>Pick the venue's Wi-Fi.</li>
       </ol>
+      <p class="join-line hidden" id="setup-join" role="status"></p>
       <figure class="qr-small">
         <img id="qr-ui" alt="QR code for the setup page" width="110" height="110">
         <figcaption>Page did not open? Scan this, or go to <strong id="setup-url"></strong></figcaption>
@@ -68,6 +69,9 @@
       <p class="hint diag" id="setup-diag"></p>
     </div>
   </section>
+
+  <!-- A venue join in progress, or how the last one ended (C&G #209 v8.3) -->
+  <section id="join-banner" class="banner join-banner hidden" role="status"></section>
 
   <!-- Phone side of the setup hotspot (the captive page lands here) -->
   <section id="setup-phone" class="banner setup-phone hidden">
@@ -115,6 +119,8 @@
           <input id="wifi-password" class="input grow" type="password" placeholder="Wi-Fi password" minlength="8" autocapitalize="off">
           <button type="button" id="wifi-show" class="btn btn-ghost" aria-label="Show password">Show</button>
         </div>
+        <p class="drop-note hidden" id="wifi-drop"><strong>Your phone will drop off the screen's Wi-Fi now.</strong>
+          Watch the screen: it shows how the join goes. If it fails, the <strong id="wifi-drop-ssid"></strong> Wi-Fi comes back in about a minute: join it again and retry.</p>
         <div class="row">
           <button type="submit" class="btn btn-primary">Connect</button>
           <button type="button" id="wifi-cancel" class="btn">Cancel</button>

@@ -180,9 +180,26 @@
     $("setup-pin-wrap").classList.toggle("hidden", !showPin);
     $("setup-pin").textContent = showPin ? s.settings.admin_pin : "";
     $("setup-url").textContent = h.ui_url || ""; $("setup-id").textContent = s.device.id;
-    $("setup-diag").textContent = s.local ? fmtDiag(h.diag) : "";
+    renderJoin(s, show);
+    $("setup-diag").textContent = s.local ? [fmtDiag(h.diag), fmtJoin(s.join)].filter(Boolean).join(" · ") : "";
     // the clean screen hides it; it comes back when a phone was refused, or with the D key
     $("setup-diag").classList.toggle("show", s.local && (diagKey || !!(h.diag && h.diag.refused)));
+  };
+  /* ---------------- venue join on the screen (C&G #209 v8.3) ----------------
+     The phone drops off when the hotspot stops, so the screen is where the join is seen:
+     the step and the exact name while it runs, and NetworkManager's reason when it fails. */
+  const fmtJoin = (j) => !j ? "" : `join: "${j.ssid}" ${j.step}${j.nm_reason ? ` (${j.nm_reason})` : ""}`;
+  const renderJoin = (s, setupShowing) => {
+    const j = s.join, banner = $("join-banner"), line = $("setup-join");
+    const running = j && j.ok === null, failed = j && j.ok === false;
+    // the screen shows it on the QR card while setup is up; a phone back on the hotspot sees the banner
+    banner.classList.toggle("hidden", !j || (s.local && setupShowing));
+    banner.classList.toggle("bad", !!failed);
+    if (j) banner.innerHTML = running ? `Joining <strong>${esc(j.ssid)}</strong>: ${esc(j.step)}…`
+      : failed ? `<strong>${esc(j.ssid)}</strong> did not join: ${esc(j.reason || "unknown reason")}.`
+      : `Joined <strong>${esc(j.ssid)}</strong>.`;
+    line.classList.toggle("hidden", !(s.local && failed));
+    if (failed) line.innerHTML = `Last try: <strong>${esc(j.ssid)}</strong> did not join: ${esc(j.reason || "unknown reason")}. Scan the code to try again.`;
   };
   /* ---------------- boot splash (C&G #209 v8.2) ----------------
      On the screen only. It stays until there is something to show: the QR setup screen; the
@@ -324,6 +341,10 @@
   const connect = async (ssid, password) => {
     const btn = $("wifi-form").querySelector("button[type=submit]"); busy(btn, true);
     $("wifi-error").textContent = "";
+    // on the screen's own hotspot the answer never comes back: say so before it drops (C&G #209 v8.3)
+    const dropping = document.body.classList.contains("phone-setup");
+    $("wifi-drop-ssid").textContent = (state.status && state.status.hotspot && state.status.hotspot.ssid) || "screen's";
+    $("wifi-drop").classList.toggle("hidden", !dropping);
     try {
       const r = await api("/api/wifi/connect", { method: "POST", body: { ssid, password: password || null } });
       toast(r.online ? `Connected to ${ssid}` : r.captive_portal ? `Joined ${ssid} — sign in to get online` : `Joined ${ssid}, checking internet…`, r.online ? "ok" : "");

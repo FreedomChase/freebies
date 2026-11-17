@@ -153,7 +153,7 @@ def test_helper_scan_retries_then_reports_the_error(monkeypatch):
     assert nets == [] and "busy" in err and len(calls) == 2 and calls[0][-1] == "ap-force"
 
 
-def _fake_nm(tmp_path, monkeypatch, unit_active, nm_nets, connect_ok=True):
+def _fake_nm(tmp_path, monkeypatch, unit_active, nm_nets, connect_ok=True, journal=""):
     """HostapdNetworkManager against fake systemctl/nmcli. Returns (nm, calls, state)."""
     state = {"active": unit_active, "managed": not unit_active, "saved": [], "connected": None}
     calls = []
@@ -166,6 +166,8 @@ def _fake_nm(tmp_path, monkeypatch, unit_active, nm_nets, connect_ok=True):
             state["active"] = False
         if args[:2] == ["systemctl", "start"]:
             state["active"] = True
+        if args[0] == "journalctl":
+            return journal
         return ""
 
     def fake_nmcli(*a, **k):
@@ -189,6 +191,15 @@ def _fake_nm(tmp_path, monkeypatch, unit_active, nm_nets, connect_ok=True):
             if not connect_ok:
                 raise netman.NetError("Error: Connection activation failed: (7) Secrets were required")
             state["connected"] = a[3]
+            return ""
+        if a[:2] == ("connection", "add"):
+            state["saved"].append(a[a.index("con-name") + 1])
+            state.setdefault("profiles", []).append(a)
+            return ""
+        if "up" in a and "connection" in a:
+            if not connect_ok:
+                raise netman.NetError("Error: Connection activation failed: (1) Unknown error.")
+            state["connected"] = a[a.index("up") + 1]
             return ""
         if a[:2] == ("connection", "delete"):
             state["saved"] = [n for n in state["saved"] if n != a[2]]
@@ -221,9 +232,10 @@ def test_join_from_the_hotspot_hands_the_radio_back_first(tmp_path, monkeypatch)
     nm.wifi_connect("Cafe Sol", "venuepass1")
     i_stop = calls.index(["systemctl", "stop", "usb-router-hotspot.service"])
     i_managed = calls.index(["nmcli", "device", "set", "wlan0", "managed", "yes"])
-    i_join = next(i for i, c in enumerate(calls) if c[:4] == ["nmcli", "device", "wifi", "connect"])
+    i_join = next(i for i, c in enumerate(calls) if c[:3] == ["nmcli", "connection", "add"])
     assert i_stop < i_managed < i_join
     assert state["connected"] == "Cafe Sol" and not state["active"] and not nm.busy()
+    assert nm.join_state()["ok"] is True and nm.join_state()["step"] == "joined"
 
 
 def test_failed_join_brings_the_setup_hotspot_back_and_forgets_the_try(tmp_path, monkeypatch):
@@ -315,3 +327,48 @@ def test_helper_run_scans_before_hostapd_and_rescans_on_request(tmp_path, monkey
     data = json.loads((tmp_path / "run" / "scan.json").read_text())
     assert data["mode"] == "ap" and [n["ssid"] for n in data["networks"]] == ["Cafe Sol"]
     assert stat.S_IMODE((tmp_path / "run" / "scan.json").stat().st_mode) == 0o644
+
+
+def test_join_uses_a_profile_with_the_exact_name_not_a_neighbour(tmp_path, monkeypatch):
+    """C&G #209 v8.3: Shaun picked Livebox6s-CB36 and the screen tried Livebox6s-CB36-2G&5G."""
+    nets = ["Livebox6s-CB36-2G&5G", "Livebox6s-CB36"]
+    nm, calls, state = _fake_nm(tmp_path, monkeypatch, True, nets)
+    nm.wifi_connect("Livebox6s-CB36", "venuepass1")
+    (add,) = state["profiles"]
+    assert add[add.index("ssid") + 1] == "Livebox6s-CB36" and add[add.index("con-name") + 1] == "Livebox6s-CB36"
+    assert add[add.index("ifname") + 1] == "wlan0"
+    up = next(c for c in calls if c[:2] == ["nmcli", "--wait"])
+    assert up[-4:] == ["up", "Livebox6s-CB36", "ifname", "wlan0"]
+    assert not any(c[:4] == ["nmcli", "device", "wifi", "connect"] for c in calls)   # no lookup by name
+    assert state["connected"] == "Livebox6s-CB36"
+
+
+NM_JOURNAL = """<info>  [1.0] device (wlan0): state change: unmanaged -> unavailable (reason 'managed', sys-iface-state: 'external')
+<info>  [2.0] device (wlan0): state change: disconnected -> prepare (reason 'none', sys-iface-state: 'managed')
+<info>  [3.0] device (wlan0): state change: config -> need-auth (reason 'none', sys-iface-state: 'managed')
+<info>  [9.0] device (wlan0): state change: need-auth -> failed (reason 'no-secrets', sys-iface-state: 'managed')
+<info>  [9.1] device (wlan0): state change: failed -> disconnected (reason 'none', sys-iface-state: 'managed')
+<info>  [9.2] device (eth0): state change: activated -> failed (reason 'dhcp-failed', sys-iface-state: 'managed')
+"""
+
+
+def test_failed_join_keeps_networkmanagers_reason_for_the_screen(tmp_path, monkeypatch):
+    nm, calls, state = _fake_nm(tmp_path, monkeypatch, True, ["Cafe Sol"], connect_ok=False, journal=NM_JOURNAL)
+    with pytest.raises(netman.NetError) as e:
+        nm.wifi_connect("Cafe Sol", "wrongpass1")
+    j = nm.join_state()
+    assert j["ok"] is False and j["ssid"] == "Cafe Sol" and j["nm_reason"] == "no-secrets"
+    assert "wrong password" in j["reason"] and str(e.value) == j["reason"]
+    assert "wrongpass1" not in json.dumps(j)                             # the password never reaches the screen
+    assert state["active"] and "Cafe Sol" not in state["saved"]
+
+
+def test_nm_reason_reads_the_last_real_reason_for_that_radio(monkeypatch):
+    monkeypatch.setattr(netman, "_run", lambda args, timeout=0, check=True: NM_JOURNAL)
+    assert netman.nm_reason("wlan0", 100)["code"] == "no-secrets"         # eth0's dhcp-failed is not ours
+    assert netman.nm_reason("eth0", 100)["words"].startswith("joined, but")
+    monkeypatch.setattr(netman, "_run", lambda args, timeout=0, check=True:
+                        "device (wlan0): state change: config -> failed (reason 'sim-pin-incorrect', x)\n")
+    assert netman.nm_reason("wlan0", 100)["words"] == "NetworkManager said: sim-pin-incorrect"
+    monkeypatch.setattr(netman, "_run", lambda args, timeout=0, check=True: "")
+    assert netman.nm_reason("wlan0", 100) is None

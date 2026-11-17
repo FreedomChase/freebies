@@ -3,6 +3,7 @@ Tests for the connection manager, run against the mock NetworkManager.
 
     USB_ROUTER_MOCK=1 python3 -m pytest tests/
 """
+import time
 import importlib
 import os
 import sys
@@ -760,3 +761,21 @@ def test_restart_keeps_the_share_and_setup_role(client):
     rt.start(role="setup")
     rt.restart()
     assert calls[-1] is False and rt.role == "setup"
+
+
+def test_status_carries_the_last_venue_join_for_ten_minutes(client):
+    """C&G #209 v8.3: the phone is gone during a join, so the screen shows its step and reason."""
+    assert client.get("/api/status").get_json()["join"] is None
+    nm = client.server.nm
+    nm.last_join = {"ssid": "Livebox6s-CB36", "step": "failed", "ok": False, "reason": "wrong password",
+                    "nm_reason": "no-secrets", "nm_error": "Error: x", "at": time.time()}
+    j = client.get("/api/status").get_json()["join"]
+    assert j["ssid"] == "Livebox6s-CB36" and j["reason"] == "wrong password" and "nm_error" not in j
+    nm.last_join["at"] = time.time() - 601
+    assert client.get("/api/status").get_json()["join"] is None
+
+
+def test_page_has_the_join_banner_and_the_phone_drop_note(client):
+    html = client.get("/").get_data(as_text=True)
+    for el in ('id="join-banner"', 'id="setup-join"', 'id="wifi-drop"', 'id="wifi-drop-ssid"'):
+        assert el in html

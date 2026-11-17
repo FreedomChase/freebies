@@ -257,7 +257,15 @@ def api_status():
         "current_url": _state["current_url"],
         "power": _state.get("power"),
         "backend": nm.name,
+        "join": _join_for(nm.join_state()),
     })
+
+
+def _join_for(j):
+    """The last venue join for the screen (C&G #209 v8.3); dropped after 10 minutes."""
+    if not j or time.time() - (j.get("at") or 0) > 600:
+        return None
+    return {k: j.get(k) for k in ("ssid", "step", "ok", "reason", "nm_reason", "at")}
 
 
 @app.get("/api/check")
@@ -288,6 +296,7 @@ def api_wifi_connect():
     password = data.get("password") or None
     if not ssid:
         return fail("Choose a network")
+    log.info("venue join asked for %r (%d chars), password %s", ssid, len(ssid), "given" if password else "none")
     if password and len(password) < 8:
         return fail("Wi-Fi passwords are at least 8 characters")
     try:

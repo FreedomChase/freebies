@@ -200,6 +200,9 @@ class NetworkManager:
     def wifi_forget(self, ssid):
         nmcli("connection", "delete", ssid)
 
+    def join_state(self):
+        return None          # only the hotspot backend joins blind, with the phone gone (C&G #209)
+
     def ensure_profile(self, ssid, password=None, priority=10):
         """Create a saved, auto-connecting profile (zero-touch provisioning). No-op if it exists."""
         if ssid in {c["name"] for c in self.saved_connections()}:
@@ -324,6 +327,47 @@ REFUSAL = re.compile(r"PSK-MISMATCH|WRONG_KEY|pre-shared key may be incorrect|de
                      r"disassociated due to|AP-STA-POSSIBLE-PSK-MISMATCH|EAPOL-Key timeout|"
                      r"auth.*(fail|timeout|reject)|assoc.*(fail|reject)|Failed to|hostapd exited|"
                      r"dnsmasq exited|did not start", re.I)
+
+
+# NetworkManager's failure reasons (journal: "state change: config -> failed (reason 'X', ...)")
+# in the words the screen shows (C&G #209 v8.3). Anything else is shown as NetworkManager's own code.
+NM_REASONS = {
+    "no-secrets": "wrong password (the network refused it)",
+    "supplicant-disconnect": "wrong password, or the network dropped the screen while joining",
+    "supplicant-timeout": "the network did not answer: too far, or it needs WPA3, which this screen cannot do",
+    "supplicant-failed": "the Wi-Fi chip could not start the join",
+    "ssid-not-found": "network not found: too far, or 5 GHz only",
+    "ip-config-unavailable": "joined, but the network gave no address (DHCP)",
+    "ip-config-expired": "joined, but the address ran out (DHCP)",
+    "dhcp-failed": "joined, but the network gave no address (DHCP)",
+    "dhcp-start-failed": "joined, but could not ask for an address (DHCP)",
+}
+_IGNORED_REASONS = {"none", "unknown", "new-activation", "user-requested", "connection-assumed",
+                    "now-managed", "now-unmanaged", "removed", "managed", "unmanaged"}
+
+
+def nm_reason(iface, since):
+    """The last real failure reason NetworkManager logged for iface since `since` (epoch s)."""
+    out = _run(["journalctl", "-u", "NetworkManager", "--since", f"@{int(since) - 1}", "-o", "cat",
+                "--no-pager", "-q"], timeout=10, check=False) or ""
+    code = None
+    for line in out.splitlines():
+        if f"device ({iface})" not in line or "state change" not in line:
+            continue
+        m = re.search(r"reason '([a-z0-9-]+)'", line)
+        if m and m.group(1) not in _IGNORED_REASONS:
+            code = m.group(1)
+    if not code:
+        return None
+    return {"code": code, "words": NM_REASONS.get(code, f"NetworkManager said: {code}")}
+
+
+def _plain_error(text):
+    if "Secrets were required" in text or "802-11-wireless-security" in text:
+        return NM_REASONS["no-secrets"]
+    if "No network with SSID" in text:
+        return NM_REASONS["ssid-not-found"]
+    return text.replace("Error: ", "").strip()[:160] or "the join failed"
 
 
 def clock_source():
@@ -471,6 +515,9 @@ class MockNetworkManager:
         if self.connected_ssid == ssid:
             self.connected_ssid = None
 
+    def join_state(self):
+        return getattr(self, "last_join", None)
+
     def ensure_profile(self, ssid, password=None, priority=10):
         if ssid in self.saved:
             return False
@@ -579,6 +626,7 @@ class HostapdNetworkManager(NetworkManager):
         self.scan_request = os.path.join(self.state_dir, "scan-request")
         self.scan_file = scan_file or self.SCAN_FILE
         self._busy_until = 0.0
+        self._join = None
         self.sleep = time.sleep
 
     def busy(self):
@@ -651,12 +699,38 @@ class HostapdNetworkManager(NetworkManager):
             self.sleep(1)
         return False
 
+    def join_state(self):
+        """The last venue join from the hotspot, for the screen (C&G #209 v8.3): which name was
+        asked for, the step it reached and, when it failed, NetworkManager's reason in plain words."""
+        return dict(self._join) if self._join else None
+
+    def _join_step(self, step, **kw):
+        self._join = {**(self._join or {}), "step": step, "at": time.time(), **kw}
+        log.info("venue join: %s %r %s", step, self._join.get("ssid"), kw or "")
+
+    def _join_profile(self, ssid, password, iface):
+        """Join with a profile carrying this exact name (C&G #209 v8.3). `device wifi connect` looks
+        the name up among the access points NetworkManager has seen; on Shaun's screen it came up
+        on a neighbouring name. A profile with ssid=<name>, bound to iface, leaves nothing to look up."""
+        saved = {c["name"] for c in self.saved_connections()}
+        if ssid in saved and not password:
+            nmcli("--wait", "45", "connection", "up", ssid, "ifname", iface, timeout=60)
+            return
+        if ssid in saved:
+            nmcli("connection", "delete", ssid, check=False)       # new password: a fresh profile
+        args = ["connection", "add", "type", "wifi", "ifname", iface, "con-name", ssid,
+                "ssid", ssid, "connection.autoconnect", "yes"]
+        if password:
+            args += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
+        nmcli(*args)
+        nmcli("--wait", "45", "connection", "up", ssid, "ifname", iface, timeout=60)
+
     def wifi_connect(self, ssid, password=None, iface=None):
         """
         Join the venue Wi-Fi from the setup hotspot (C&G #209): hostapd holds the only radio, so
         stop it, hand the radio back to NetworkManager, wait until it sees the network, join.
         If the join fails, the setup hotspot comes back with the same settings, so the phone can
-        rejoin and try again.
+        rejoin and try again, and the screen shows why it failed (v8.3).
         """
         if not ssid:
             raise NetError("No network name given")
@@ -666,14 +740,20 @@ class HostapdNetworkManager(NetworkManager):
             return super().wifi_connect(ssid, password, iface)
         ap_iface = req["iface"]
         self._busy_until = time.time() + self.JOIN_BUSY
+        started = time.time()
+        self._join = {"ssid": ssid, "ok": None, "reason": None, "started": started}
         try:
             saved_before = {c["name"] for c in self.saved_connections()}
+            self._join_step("handing the radio back")
             seen = self._handback(ap_iface, ssid)
-            log.info("venue join: radio back with NetworkManager, %s %s", ssid,
-                     "seen" if seen else "not seen yet")
+            self._join_step("joining" if seen else "joining (not seen in the scan yet)", seen=seen)
             try:
-                super().wifi_connect(ssid, password, ap_iface)
-            except NetError:
+                self._join_profile(ssid, password, ap_iface)
+            except NetError as e:
+                reason = nm_reason(ap_iface, started) or {}
+                words = reason.get("words") or _plain_error(str(e))
+                self._join_step("failed", ok=False, reason=words, nm_reason=reason.get("code"),
+                                nm_error=str(e)[:200])
                 if ssid not in saved_before:   # a failed first try must not count as "configured"
                     nmcli("connection", "delete", ssid, check=False)
                 try:
@@ -681,7 +761,8 @@ class HostapdNetworkManager(NetworkManager):
                                        req.get("band") or "bg", share=bool(req.get("share")))
                 except NetError as e2:
                     log.warning("setup hotspot did not come back after a failed join: %s", e2)
-                raise
+                raise NetError(words)
+            self._join_step("joined", ok=True)
         finally:
             self._busy_until = 0.0
 
