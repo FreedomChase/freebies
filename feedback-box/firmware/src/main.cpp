@@ -17,6 +17,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <WiFiManager.h>
+#include "bootloader_random.h"
 
 extern const uint8_t rootca_crt_bundle_start[] asm("_binary_data_cert_x509_crt_bundle_bin_start");
 
@@ -240,7 +241,11 @@ void setup() {
   if (qPrefs.isKey("seq")) {
     nextSeq = qPrefs.getUInt("seq", 1);
   } else {
+    // Wi-Fi is not on yet, so esp_random() would only be pseudo-random here: switch on the
+    // hardware entropy source for this one read (safe while Wi-Fi and the ADC are off).
+    bootloader_random_enable();
     nextSeq = (esp_random() & 0x3FFFFFFF) | 1;  // 1 .. 2^30-1; the server takes up to 2^31
+    bootloader_random_disable();
     qPrefs.putUInt("seq", nextSeq);
   }
   bootId = qPrefs.getUInt("boot", 0) + 1;
