@@ -220,6 +220,11 @@ class Config:
         else:
             raise ValueError("unknown secret")
         self._write_secrets()
+        # a value from usb-router.conf or an earlier save outranks the generated one, so
+        # without this the new password/PIN never took effect (C&G #208)
+        if self.values.get(name, "").strip():
+            self.values[name] = ""
+            self._persist({name: ""})
         return self.secrets[name]
 
     # -- saving ------------------------------------------------------------
@@ -257,16 +262,19 @@ class Config:
             self.values[key] = value
             changed[key] = value
         if changed:
-            try:
-                self.state_dir.mkdir(parents=True, exist_ok=True)
-                current = {}
-                if self.settings_path.exists():
-                    current = json.loads(self.settings_path.read_text(encoding="utf-8"))
-                current.update(changed)
-                self.settings_path.write_text(json.dumps(current, indent=2), encoding="utf-8")
-            except (OSError, ValueError):
-                pass  # read-only media: settings live for this session only
+            self._persist(changed)
         return changed
+
+    def _persist(self, changed: dict):
+        try:
+            self.state_dir.mkdir(parents=True, exist_ok=True)
+            current = {}
+            if self.settings_path.exists():
+                current = json.loads(self.settings_path.read_text(encoding="utf-8"))
+            current.update(changed)
+            self.settings_path.write_text(json.dumps(current, indent=2), encoding="utf-8")
+        except (OSError, ValueError):
+            pass  # read-only media: settings live for this session only
 
     # -- accessors ---------------------------------------------------------
     def get(self, key: str) -> str:

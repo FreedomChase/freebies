@@ -560,9 +560,10 @@ def test_password_on_screen_is_the_one_the_hotspot_gets(client, tmp_path):
     srv.nm.hotspot_start = lambda iface, ssid, pw, band="bg": (given.append(pw), real(iface, ssid, pw, band))
     before = client.get("/api/settings").get_json()["settings"]["hotspot_password"]
     shown = client.post("/api/secrets/rotate", json={"name": "hotspot_password"}).get_json()["settings"]["hotspot_password"]
-    # a configured password (here the env, on a stick usb-router.conf or an earlier Save) wins over
-    # the generated one, so the button changes nothing visible: screen and hotspot still agree
-    assert shown == before == "testpass123"
+    # a configured password (here the env, on a stick usb-router.conf or an earlier Save) used to
+    # win over the generated one, so the button changed nothing (C&G #208): now it is replaced
+    assert before == "testpass123" and shown != before
+    assert client.get("/api/settings").get_json()["settings"]["hotspot_password_source"] == "generated"
     # Save posts the field as it stands (the rotated password)
     assert client.post("/api/settings", json={"hotspot_ssid": "USB-Router", "hotspot_password": shown,
                                               "hotspot_band": "bg"}).status_code == 200
@@ -715,3 +716,28 @@ def test_shut_down_needs_the_pin_and_tells_every_screen(client):
     page = client.get("/").get_data(as_text=True)
     assert page.count('data-action="reboot"') == 1 and page.count('data-action="shutdown"') == 1
     assert "Safe to unplug when the green light stops blinking." in page
+
+
+def test_rotate_replaces_a_configured_password_and_pin(client, tmp_path):
+    """C&G #208: with a password set (conf/env/earlier Save), New hotspot password and New PIN
+    took no effect, because the configured value outranks the generated one."""
+    srv = client.server
+    given = []
+    real = srv.nm.hotspot_start
+    srv.nm.hotspot_start = lambda iface, ssid, pw, band="bg", **kw: (given.append(pw), real(iface, ssid, pw, band, **kw))
+    assert client.post("/api/settings", json={"hotspot_password": "first-pass-77"}).status_code == 200
+    assert client.post("/api/hotspot", json={"action": "start"}).status_code == 200
+    assert given[-1] == "first-pass-77"
+    new = client.post("/api/secrets/rotate", json={"name": "hotspot_password"}).get_json()["settings"]["hotspot_password"]
+    assert new != "first-pass-77"
+    assert given[-1] == new                        # the running hotspot was restarted with it
+    assert client.get("/api/status").get_json()["hotspot"]["password"] == new
+    import json as _json
+    assert _json.loads((tmp_path / "settings.json").read_text())["hotspot_password"] == ""
+    # survives a restarted app: settings.json's blank outranks the env/conf value
+    assert srv.Config().hotspot_password() == new
+    # the PIN: configured 246810 (env), New PIN replaces it and the old one stops working
+    assert srv.cfg.admin_pin_source() == "config"
+    pin = srv.cfg.rotate_secret("admin_pin")
+    assert srv.cfg.admin_pin() == pin != "246810"
+    assert srv.cfg.admin_pin_source() == "new"
