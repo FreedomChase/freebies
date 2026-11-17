@@ -88,6 +88,17 @@ check("box name is escaped", "Demo reception &lt;desk&gt;" in page and "<desk>" 
 check("test presses shown apart", "Test presses (BOOT button): 1" in page, "")
 check("noindex header", h.get("x-robots-tag") == "noindex" or h.get("X-Robots-Tag") == "noindex", h)
 
+# C&G #213 review: an erase-flashed box starts at a random seq in 1 .. 2^30-1; the top of
+# that range and the server's limit 2^31 must be taken, one above the limit refused.
+time.sleep(2.2)
+s, b, _ = req("POST", "/api/rating", {"rating": "test", "seq": 2**30 - 1}, key=RECEPTION)
+check("seq 2^30-1 (top of the random start) -> 201", s == 201, f"{s} {b}")
+time.sleep(2.2)
+s, b, _ = req("POST", "/api/rating", {"rating": "test", "seq": 2**31}, key=RECEPTION)
+check("seq 2^31 -> 201", s == 201, f"{s} {b}")
+s, b, _ = req("POST", "/api/rating", {"rating": "test", "seq": 2**31 + 1}, key=RECEPTION)
+check("seq 2^31+1 -> 400", s == 400 and "seq" in b, f"{s} {b}")
+
 s, b, _ = req("GET", "/count")
 check("count without key -> 404", s == 404, s)
 s, b, _ = req("GET", "/count?k=" + VIEW_KEY[:-1] + "x")

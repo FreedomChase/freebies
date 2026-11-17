@@ -20,7 +20,7 @@ apart from the real counts.
 1. Download **esptool** for Windows from Espressif:
    `https://github.com/espressif/esptool/releases/download/v5.6.0/esptool-v5.6.0-windows-amd64.zip`.
    Unzip it. Inside is `esptool.exe`.
-2. Put `feedback-box-v1.bin` in the same folder as `esptool.exe`.
+2. Put `feedback-box-v1.1.bin` in the same folder as `esptool.exe`.
 3. Plug the board in with a USB-C **data** cable (some cables only charge).
 4. Find the port: open **Device Manager**, then **Ports (COM & LPT)**. Look for
    **Silicon Labs CP210x USB to UART Bridge (COM5)**. The number may be different.
@@ -28,12 +28,16 @@ apart from the real counts.
 5. Open a terminal in that folder and run, with your COM number:
 
        esptool.exe --chip esp32 --port COM5 erase-flash
-       esptool.exe --chip esp32 --port COM5 --baud 460800 write-flash 0x0 feedback-box-v1.bin
+       esptool.exe --chip esp32 --port COM5 --baud 460800 write-flash 0x0 feedback-box-v1.1.bin
 
    If it says **Failed to connect**: run it again and hold the **BOOT** button while it says `Connecting...`.
 6. Press **EN** (the reset button). The board starts the feedback box.
 
-Check the file first (optional): `certutil -hashfile feedback-box-v1.bin SHA256` must print the value in
+Erase-flash also wipes the box's own press numbers. That is safe: after an erase the box starts
+its numbers at a random point, so the server never takes new presses for ones it already stored.
+The Wi-Fi, server address and key are wiped too, so set them up again (next section).
+
+Check the file first (optional): `certutil -hashfile feedback-box-v1.1.bin SHA256` must print the value in
 `SHA256SUMS.txt`.
 
 ## Setting it up (Wi-Fi, server, key)

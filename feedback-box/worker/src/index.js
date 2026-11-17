@@ -103,16 +103,25 @@ async function countPage(url, env) {
     return new Response("Not found", { status: 404, headers: { "content-type": "text/plain" } });
   }
   const since = (days) => new Date(Date.now() - days * 86400000).toISOString();
-  const rows = await env.DB.prepare(
-    `SELECT d.name AS name, r.rating AS rating,
-            SUM(CASE WHEN r.pressed_at >= ?1 THEN 1 ELSE 0 END) AS today,
-            COUNT(*) AS week
-       FROM ratings r JOIN devices d ON d.id = r.device_id
-      WHERE r.pressed_at >= ?2
-      GROUP BY d.name, r.rating`
-  )
-    .bind(since(1), since(7))
-    .all();
+  let rows;
+  try {
+    rows = await env.DB.prepare(
+      `SELECT d.name AS name, r.rating AS rating,
+              SUM(CASE WHEN r.pressed_at >= ?1 THEN 1 ELSE 0 END) AS today,
+              COUNT(*) AS week
+         FROM ratings r JOIN devices d ON d.id = r.device_id
+        WHERE r.pressed_at >= ?2
+        GROUP BY d.name, r.rating`
+    )
+      .bind(since(1), since(7))
+      .all();
+  } catch (err) {
+    console.log("count query failed: " + err);
+    return page(
+      `<section class="card warn"><h2>Counts not available</h2><p>The count store did not answer. Presses are not lost: each box keeps them and sends them again. Reload in a minute.</p></section>`,
+      503
+    );
+  }
 
   const boxes = {};
   for (const r of rows.results || []) {
@@ -137,20 +146,31 @@ async function countPage(url, env) {
     const test = b.test[1] ? `<p class="small">Test presses (BOOT button): ${b.test[1]}, not counted above.</p>` : "";
     cards += `<section class="card"><h2>${esc(name)}</h2><p class="small">${total} presses in 7 days</p>${bars}${test}</section>`;
   }
-  if (!cards) cards = `<section class="card"><h2>No presses yet</h2><p>Press a button on a box and reload.</p></section>`;
+  if (!cards) cards = `<section class="card"><h2>No presses yet</h2><p>No box has sent a press in the last 7 days. Press a button on a box and reload.</p></section>`;
 
+  return page(`<h1>Feedback counts, last 7 days</h1>${cards}`, 200);
+}
+
+function page(inner, status) {
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Feedback Counts</title><style>
 body{margin:0;background:#FBF8F2;color:#14213D;font-family:"DejaVu Sans",Verdana,sans-serif;font-size:19px;line-height:1.6}
 main{max-width:720px;margin:0 auto;padding:24px 16px}
-h1{font-size:30px;margin:0 0 16px}h2{margin:0;font-size:24px}
+h1{font-size:30px;line-height:1.2;margin:0 0 16px}h2{margin:0;font-size:24px;line-height:1.25}
 .card{background:#fff;border-left:12px solid #1F3A68;border-radius:10px;padding:16px 20px;margin:0 0 18px}
+.card.warn{border-left-color:#D64545}
 .row{display:grid;grid-template-columns:80px 1fr 50px 90px;gap:10px;align-items:center;margin:6px 0}
 .bar{background:#EEE;border-radius:6px;height:22px;overflow:hidden}.bar span{display:block;height:100%}
 .today,.small{color:#4A5568;font-size:15px}
-</style></head><body><main><h1>Feedback counts, last 7 days</h1>${cards}</main></body></html>`;
+@media (max-width:480px){
+.card{border-left-width:6px;padding:16px}
+.row{grid-template-columns:auto auto 1fr;grid-template-areas:"lbl num today" "bar bar bar";gap:2px 10px;margin:10px 0}
+.lbl{grid-area:lbl}.row b{grid-area:num}.today{grid-area:today;text-align:right}.bar{grid-area:bar;height:12px}
+}
+</style></head><body><main>${inner}</main></body></html>`;
   return new Response(html, {
+    status,
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",

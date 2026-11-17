@@ -235,7 +235,14 @@ void setup() {
   cfgPrefs.begin("fbcfg", false);
   qHead = qPrefs.getUInt("h", 0);
   qTail = qPrefs.getUInt("t", 0);
-  nextSeq = qPrefs.getUInt("seq", 1);
+  // A box that was erase-flashed has no "seq": start at a random number, not at 1, so the
+  // server does not take its first presses as repeats of the ones it stored before (C&G #213).
+  if (qPrefs.isKey("seq")) {
+    nextSeq = qPrefs.getUInt("seq", 1);
+  } else {
+    nextSeq = (esp_random() & 0x3FFFFFFF) | 1;  // 1 .. 2^30-1; the server takes up to 2^31
+    qPrefs.putUInt("seq", nextSeq);
+  }
   bootId = qPrefs.getUInt("boot", 0) + 1;
   qPrefs.putUInt("boot", bootId);
   cfgUrl = cfgPrefs.getString("url", "");
