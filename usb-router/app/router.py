@@ -210,7 +210,21 @@ class Router:
         s["setup_window_until"] = self.setup_until if self.setup_window_open() else None
         s["configured"] = self.is_configured()
         s["ui_url"] = f"http://{s['ip'] or '10.42.0.1'}:{self.cfg.get('listen_port')}" if s["active"] else None
+        s["diag"] = self._diag(s["iface"]) if (local and s["active"] and s["mode"] == "wifi") else None
         return s
+
+    def _diag(self, iface):
+        """hotspot_diag, at most once every 10 s (the screen polls status often)."""
+        now = time.time()
+        cached = getattr(self, "_diag_cache", None)
+        if cached and cached[0] == iface and now - cached[1] < 10:
+            return cached[2]
+        try:
+            d = self.nm.hotspot_diag(iface)
+        except Exception as e:  # diagnostics must never break status
+            d = {"error": str(e)[:120]}
+        self._diag_cache = (iface, now, d)
+        return d
 
     def wants_setup_hotspot(self):
         return self.cfg.flag("setup_hotspot") and not self.auto_disabled

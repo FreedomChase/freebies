@@ -176,6 +176,7 @@
     $("setup-pin-wrap").classList.toggle("hidden", !showPin);
     $("setup-pin").textContent = showPin ? s.settings.admin_pin : "";
     $("setup-url").textContent = h.ui_url || ""; $("setup-id").textContent = s.device.id;
+    $("setup-diag").textContent = s.local ? fmtDiag(h.diag) : "";
   };
 
   /* ---------------- fleet ---------------- */
@@ -305,9 +306,26 @@
   $("hidden-form").onsubmit = (e) => { e.preventDefault(); state.selected = { ssid: $("hidden-ssid").value.trim(), secured: !!$("hidden-pass").value, saved: false }; connect(state.selected.ssid, $("hidden-pass").value); };
 
   /* ---------------- hotspot ---------------- */
+  /* one line of Wi-Fi facts for the screen, so a failed phone join tells us why (S&D #193) */
+  const fmtDiag = (d) => {
+    if (!d) return "";
+    if (d.error) return `Wi-Fi check: ${d.error}`;
+    const sec = d.security === "wpa-psk" ? "WPA2" : (d.security || "?");
+    return [
+      `Wi-Fi check: on ${d.iface || "?"}`,
+      d.channel ? `channel ${d.channel}` : "channel ?",
+      `country ${d.country || "?"}`,
+      `${sec}, PMF ${d.pmf || "?"}`,
+      `chip handshake ${d.fw_offload || "?"}`,
+      `${d.stations ?? "?"} phone${d.stations === 1 ? "" : "s"} joined`,
+      `last: ${d.last_event || "nothing yet"}`,
+    ].join(" · ");
+  };
+
   const renderHotspot = (h) => {
     const box = $("hotspot-status");
     box.classList.toggle("active", h.active);
+    $("hs-diag").textContent = fmtDiag(h.diag);
     if (h.active) {
       box.innerHTML = h.mode === "wifi"
         ? `Sharing as Wi-Fi network <strong>${esc(h.ssid)}</strong> on ${esc(h.iface)} · router address ${h.ip || "10.42.0.1"}`

@@ -9,6 +9,7 @@ as '\\:' so we split on unescaped colons only.
 """
 
 import os
+from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -223,6 +224,10 @@ class NetworkManager:
         args = ["connection", "add", "type", "wifi", "ifname", iface,
                 "con-name", self.HOTSPOT_CON, "autoconnect", "no", "ssid", ssid,
                 "802-11-wireless.mode", "ap", "802-11-wireless.band", band,
+                # a fixed channel and no Wi-Fi power saving: brcmfmac APs (Pi Zero W) drop
+                # joins on auto channel / powersave with some phones (S&D #193)
+                "802-11-wireless.channel", "6" if band == "bg" else "36",
+                "802-11-wireless.powersave", "2",
                 "ipv4.method", "shared", "ipv6.method", "ignore"]
         if password:
             # pmf disable: left at default, NetworkManager (1.42) makes a wpa-psk AP WPA2/WPA3
@@ -233,6 +238,9 @@ class NetworkManager:
                      "wifi-sec.pmf", "disable"]
         nmcli(*args)
         nmcli("connection", "up", self.HOTSPOT_CON, timeout=45)
+
+    def hotspot_diag(self, iface):
+        return hotspot_diag(iface, self.HOTSPOT_CON)
 
     def hotspot_stop(self):
         nmcli("connection", "down", self.HOTSPOT_CON, check=False)
@@ -301,6 +309,67 @@ class NetworkManager:
 # ---------------------------------------------------------------------------
 # Mock backend for development without NetworkManager
 # ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Hotspot diagnostics for the screen (S&D #193: an iPhone could not join on a real Pi)
+# --------------------------------------------------------------------------
+DIAG_EVENTS = re.compile(r"AP-STA-|PSK-MISMATCH|4-Way|WRONG_KEY|pre-shared key|deauth|disassoc|"
+                         r"auth.*(fail|timeout|reject)|assoc.*(fail|reject)|brcmf_\w+: .*(err|fail)", re.I)
+
+
+def _tool(name):
+    return shutil.which(name) or next((p for p in (f"/usr/sbin/{name}", f"/sbin/{name}") if os.path.exists(p)), name)
+
+
+def hotspot_diag(iface, con_name):
+    """
+    One look at the access point, in plain facts: channel, regulatory country, security as
+    NetworkManager holds it, whether the Wi-Fi chip does the WPA handshake itself (brcmfmac
+    firmware offload), how many phones are associated, and the last join event in the journal.
+    Every part is best effort: a missing tool or permission leaves that part None.
+    """
+    d = {"iface": iface, "channel": None, "freq": None, "country": None, "security": None,
+         "pmf": None, "fw_offload": None, "stations": None, "last_event": None}
+    iw = _tool("iw")
+    try:
+        m = re.search(r"channel (\d+) \((\d+) MHz\)", _run([iw, "dev", iface, "info"], timeout=5, check=False))
+        if m:
+            d["channel"], d["freq"] = int(m.group(1)), int(m.group(2))
+    except NetError:
+        pass
+    try:
+        m = re.search(r"country (\w\w)", _run([iw, "reg", "get"], timeout=5, check=False))
+        d["country"] = m.group(1) if m else None
+    except NetError:
+        pass
+    try:
+        out = _run([iw, "dev", iface, "station", "dump"], timeout=5, check=False)
+        d["stations"] = len(re.findall(r"^Station ", out, re.M))
+    except NetError:
+        pass
+    try:
+        out = nmcli("-g", "802-11-wireless-security.key-mgmt,802-11-wireless-security.pmf",
+                    "connection", "show", con_name, check=False).splitlines()
+        if len(out) >= 2:
+            d["security"], d["pmf"] = out[0] or "open", {"1": "off", "2": "optional", "3": "required"}.get(out[1], out[1])
+    except NetError:
+        pass
+    try:  # brcmfmac: bit 13 FWSUP (firmware 4-way handshake), bit 19 SAE offload
+        fd = int(Path("/sys/module/brcmfmac/parameters/feature_disable").read_text().strip(), 0)
+        d["fw_offload"] = "off" if (fd & 0x2000) else "on"
+    except (OSError, ValueError):
+        pass
+    try:
+        out = _run(["journalctl", "-b", "--no-pager", "-o", "short", "-n", "400", "--since", "-30min",
+                    "-t", "wpa_supplicant", "-t", "kernel", "-t", "NetworkManager"], timeout=5, check=False)
+        hits = [l for l in out.splitlines() if DIAG_EVENTS.search(l)]
+        if hits:
+            parts = hits[-1].split(None, 5)    # Mon DD HH:MM:SS host ident: message
+            d["last_event"] = (parts[2] + " " + parts[5])[:160] if len(parts) == 6 else hits[-1][:160]
+    except NetError:
+        pass
+    return d
+
+
 class MockNetworkManager:
     name = "mock"
     HOTSPOT_CON = NetworkManager.HOTSPOT_CON
@@ -388,6 +457,10 @@ class MockNetworkManager:
 
     def hotspot_start(self, iface, ssid, password, band="bg"):
         self.hotspot = {"iface": iface, "ssid": ssid, "mode": "wifi"}
+
+    def hotspot_diag(self, iface):
+        return {"iface": iface, "channel": 6, "freq": 2437, "country": "ES", "security": "wpa-psk", "pmf": "off",
+                "fw_offload": "off", "stations": 0, "last_event": "04:12:33 wlan0: AP-STA-POSSIBLE-PSK-MISMATCH 66:55:44:33:22:11"}
 
     def hotspot_stop(self):
         self.hotspot = None

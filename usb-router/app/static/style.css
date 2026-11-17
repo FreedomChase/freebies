@@ -138,3 +138,6 @@ body.pin-locked main > :not(#pin-gate) { display: none !important; }
 .pin-gate .pin-input { font-size: 1.6rem; letter-spacing: 0.2em; text-align: center; min-height: 56px; }
 .pin-gate .btn { min-height: 52px; font-size: 1.1rem; }
 .pin-gate-msg { min-height: 1.4em; margin-top: 12px; color: var(--bad); }
+
+/* Wi-Fi check line (S&D #193): small, but readable from a phone camera photo of the screen */
+.diag { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 0.85rem; word-break: break-word; }

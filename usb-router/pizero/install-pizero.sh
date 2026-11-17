@@ -34,7 +34,8 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $PKGS
 echo "==> users"
 # kiosk runs the connection manager: drives NetworkManager (netdev) and holds the PIN and passwords
 id kiosk >/dev/null 2>&1 || useradd -m -s /bin/bash kiosk
-for g in netdev plugdev; do
+# systemd-journal: the screen's "Wi-Fi check" line reads join events from the journal (S&D #193)
+for g in netdev plugdev systemd-journal; do
   getent group "$g" >/dev/null && usermod -aG "$g" kiosk
 done
 # signage runs cog, which shows third-party web pages: the screen and input only.
@@ -82,6 +83,8 @@ install -d /etc/polkit-1/rules.d /etc/NetworkManager/conf.d
 rm -f /etc/polkit-1/rules.d/50-usb-router-networkmanager.rules
 install -m 644 "$HERE/system/40-usb-router-networkmanager.rules" /etc/polkit-1/rules.d/
 install -m 644 "$HERE/system/usb-router-networkmanager.conf" /etc/NetworkManager/conf.d/usb-router.conf
+# the Pi's Wi-Fi chip: the handshake in software, not in its firmware (S&D #193); takes effect at boot
+install -m 644 "$HERE/system/usb-router-brcmfmac.conf" /etc/modprobe.d/usb-router-brcmfmac.conf
 # captive portal (S&D #193): NetworkManager's hotspot dnsmasq reads the app's file through this link
 install -d /etc/NetworkManager/dnsmasq-shared.d
 [ -e /var/lib/usb-router/captive-dns.conf ] || : > /var/lib/usb-router/captive-dns.conf

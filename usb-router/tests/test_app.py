@@ -660,3 +660,46 @@ def test_no_hotspot_password_text_on_the_page(client):
     assert 'id="setup-pass"' not in html and "setup-pass" not in js
     assert "h.password" not in js and "s.hotspot_password ||" not in js
     assert 'id="hs-pass" class="input" type="password"' in html
+
+
+def test_screen_gets_a_wifi_check_line_phone_does_not(client):
+    """S&D #193: the screen shows channel, security, chip handshake, phones joined, last join event."""
+    client.post("/api/hotspot", json={"action": "start"})
+    local = client.get("/api/status").get_json()["hotspot"]
+    assert local["active"] and local["diag"]["channel"] == 6 and local["diag"]["fw_offload"] == "off"
+    remote = client.get("/api/status", environ_base={"REMOTE_ADDR": "10.42.0.60"}).get_json()["hotspot"]
+    assert remote["diag"] is None
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="setup-diag"' in html and 'id="hs-diag"' in html
+
+
+def test_hotspot_profile_fixed_channel_no_powersave(monkeypatch):
+    """S&D #193: the AP profile pins the channel and turns Wi-Fi power saving off."""
+    import netman
+    calls = []
+    monkeypatch.setattr(netman, "nmcli", lambda *a, **k: calls.append(a) or "")
+    netman.NetworkManager.hotspot_start(netman.NetworkManager.__new__(netman.NetworkManager), "wlan0", "USB-Router", "abcdefgh2345", "bg")
+    add = next(a for a in calls if a[:2] == ("connection", "add"))
+    kv = {add[i]: add[i + 1] for i in range(len(add) - 1)}
+    assert kv["802-11-wireless.channel"] == "6" and kv["802-11-wireless.powersave"] == "2"
+    assert kv["wifi-sec.key-mgmt"] == "wpa-psk" and kv["wifi-sec.pmf"] == "disable"
+
+
+def test_diag_parses_iw_and_journal(monkeypatch, tmp_path):
+    import netman
+    out = {
+        "info": "Interface wlan0\n\ttype AP\n\tchannel 6 (2437 MHz), width: 20 MHz\n",
+        "reg": "global\ncountry ES: DFS-ETSI\n",
+        "station": "Station 66:55:44:33:22:11 (on wlan0)\n\tinactive time: 10 ms\n",
+        "journalctl": "Nov 17 04:12:30 pi kernel: something else\nNov 17 04:12:33 pi wpa_supplicant[512]: wlan0: AP-STA-POSSIBLE-PSK-MISMATCH 66:55:44:33:22:11\n",
+    }
+    def fake_run(args, timeout=0, check=True):
+        if args[0] == "journalctl":
+            return out["journalctl"]
+        return out["station" if "station" in args else ("reg" if "reg" in args else "info")]
+    monkeypatch.setattr(netman, "_run", fake_run)
+    monkeypatch.setattr(netman, "nmcli", lambda *a, **k: "wpa-psk\n1\n")
+    d = netman.hotspot_diag("wlan0", "usb-router-hotspot")
+    assert (d["channel"], d["freq"], d["country"], d["stations"]) == (6, 2437, "ES", 1)
+    assert (d["security"], d["pmf"]) == ("wpa-psk", "off")
+    assert d["last_event"] == "04:12:33 wlan0: AP-STA-POSSIBLE-PSK-MISMATCH 66:55:44:33:22:11"
