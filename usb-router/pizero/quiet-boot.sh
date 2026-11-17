@@ -18,9 +18,10 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 # 1. the theme, as the default
 T="$ROOT/usr/share/plymouth/themes/orionpath"
 install -d -m 755 "$T"
-for f in orionpath.plymouth orionpath.script bg.png logo.png; do
+for f in orionpath.plymouth orionpath.script bg.png text.png track.png fill.png; do
   install -m 644 "$HERE/splash/$f" "$T/$f"
 done
+rm -f "$T/logo.png"   # v8.2-v8.3 had a logo; v8.4 has none (Shaun 17 Nov 09:53 CET)
 install -d -m 755 "$ROOT/etc/plymouth"
 install -m 644 "$HERE/splash/plymouthd.conf" "$ROOT/etc/plymouth/plymouthd.conf"
 # plymouth-set-default-theme only writes this link (without -R it leaves the initramfs alone)

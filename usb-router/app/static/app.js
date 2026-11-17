@@ -155,6 +155,16 @@
 
   /* ---------------- phone setup: QR first (S&D #193) ---------------- */
   let setupShown = false, phoneScrolled = false;
+  const qrPending = {};
+  const qrLoaded = (id) => { const im = $(id); return !!(im && im.getAttribute("src") && im.complete && im.naturalWidth > 0); };
+  const loadQr = (id, kind) => {
+    const im = $(id);
+    if (!im || qrPending[id]) return;
+    qrPending[id] = true;
+    im.onload = () => { qrPending[id] = false; };
+    im.onerror = () => { setTimeout(() => { qrPending[id] = false; loadQr(id, kind); }, 2000); };
+    im.src = `/api/qr?kind=${kind}&t=${Date.now()}`;
+  };
   const renderSetup = (s) => {
     const h = s.hotspot;
     // only while unconfigured or during "Allow phone setup" (not a hotspot someone started by hand)
@@ -164,12 +174,14 @@
     $("setup-phone").classList.toggle("hidden", !(show && !s.local));
     document.body.classList.toggle("setup-mode", show && s.local);
     document.body.classList.toggle("phone-setup", show && !s.local);
-    if (show && s.local && !setupShown) {
+    // C&G #209 v8.4: a QR that failed to load (the radio was switching after a failed join) showed
+    // as a blank white box for good. Every render now re-asks for a code that is not on screen.
+    if (show && s.local && (!setupShown || !qrLoaded("qr-wifi") || !qrLoaded("qr-ui"))) {
       setupShown = true;
-      $("qr-wifi").src = `/api/qr?kind=wifi&t=${Date.now()}`;
-      $("qr-ui").src = `/api/qr?kind=ui&t=${Date.now()}`;
+      if (!qrLoaded("qr-wifi")) loadQr("qr-wifi", "wifi");
+      if (!qrLoaded("qr-ui")) loadQr("qr-ui", "ui");
     }
-    if (!show) setupShown = false;
+    if (!show && setupShown) { setupShown = false; ["qr-wifi", "qr-ui"].forEach((id) => { if (!qrPending[id]) $(id).removeAttribute("src"); }); }
     if (show && !s.local && !phoneScrolled) {
       phoneScrolled = true;
       $("setup-phone").scrollIntoView({ block: "start" });   // the line, then the Wi-Fi list right under it
@@ -211,9 +223,22 @@
      so a fault is never hidden for good. */
   const SPLASH_MAX = 240000, ONLINE_HOLD = 20000, splashStart = Date.now();
   let onlineSince = null;
+  // v8.4 progress bar: Plymouth fills it to 60 % with the boot; the page creeps on towards 95 %
+  // while the connection manager starts, and fills it before the fade (no real percentage exists here)
+  const bootFill = (p) => { const el = $("boot-splash"); if (el) el.style.setProperty("--boot-p", `${p}%`); };
+  if ($("boot-splash")) {
+    bootFill(60);
+    const creep = setInterval(() => {
+      const el = $("boot-splash");
+      if (!el || el.classList.contains("gone")) { clearInterval(creep); return; }
+      const now = parseFloat(el.style.getPropertyValue("--boot-p")) || 60;
+      bootFill(Math.min(95, now + (95 - now) * 0.06));
+    }, 1000);
+  }
   const hideSplash = () => {
     const el = $("boot-splash");
     if (!el || el.classList.contains("gone")) return;
+    bootFill(100);
     el.classList.add("gone");
     document.body.classList.remove("booting");
     setTimeout(() => el.remove(), 1000);

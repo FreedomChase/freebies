@@ -44,7 +44,8 @@ def client(tmp_path, monkeypatch):
 def test_index_renders(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert b"USB Router" in r.data
+    assert b"Display Player" in r.data
+    assert b"ORIONPATH" not in r.data          # Shaun 17 Nov 09:56 CET: the icon only, no word (C&G #209 v8.4)
 
 
 def test_status_offline_initially(client):

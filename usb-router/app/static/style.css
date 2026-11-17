@@ -9,6 +9,13 @@
   --accent: var(--pink); --accent-2: var(--pink-hi);
   --ok: #8AD6AE; --warn: #F2C46B; --bad: #F59A9A;
   --radius: 10px; font-size: 17px;
+  /* the Display Player ground (Shaun, 17 Nov 09:53 CET: "more dramatic gradient"): boot splash and
+     QR screen share it, in proportions only, so Plymouth -> page -> QR never jumps (C&G #209 v8.4) */
+  --ground-dramatic:
+    radial-gradient(ellipse 70% 62% at 12% -4%, rgba(74,150,232,.62), transparent 70%),
+    radial-gradient(ellipse 58% 52% at 100% 104%, rgba(242,167,184,.34), transparent 72%),
+    radial-gradient(ellipse 46% 40% at 64% 46%, rgba(108,92,196,.16), transparent 75%),
+    linear-gradient(150deg, #0F4C8A 0%, #052444 46%, #020E1D 100%);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; color: var(--text); letter-spacing: -0.01em;
@@ -167,7 +174,8 @@ body.setup-mode main { display: flex; align-items: center; padding: 5vh 6vw; max
 body.setup-mode .setup-qr { min-height: 0; width: 100%; max-width: 1500px; margin: 0 auto;
   display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; column-gap: 6vw; row-gap: 3vh;
   align-items: center; background: none; border: 0; box-shadow: none; padding: 0; }
-body.setup-mode .setup-qr .op-lockup { grid-column: 1 / -1; width: clamp(120px, 11vw, 210px); }
+body.setup-mode .setup-qr .dp-brand { grid-column: 1 / -1; font-size: clamp(1.4rem, 2.4vw, 2.6rem); }
+body.setup-mode, body.phone-setup, body.pin-locked { background: var(--ground-dramatic); background-attachment: fixed; }
 body.setup-mode .qr-big img { width: min(54vh, 520px); height: min(54vh, 520px); margin: 0; border-radius: 10px; padding: 14px;
   box-shadow: 0 0 0 1px rgba(255,255,255,.4), 0 40px 70px -30px rgba(0,0,0,.75), 0 14px 26px -14px rgba(0,0,0,.5); }
 body.setup-mode .setup-text h2 { font-size: clamp(1.8rem, 3.2vw, 3rem); letter-spacing: -0.045em; line-height: 1.05;
@@ -195,7 +203,7 @@ body.setup-mode #setup-diag.show { display: block; }
 body.pin-locked .top, body.pin-locked .foot { display: none !important; }
 body.pin-locked main { display: flex; align-items: center; min-height: 100vh; }
 .pin-gate { background: none; border: 0; padding: 0 4px; text-align: left; width: 100%; }
-.pin-gate .op-lockup { width: 132px; margin-bottom: 2.25rem; }
+.pin-gate .dp-brand { margin-bottom: 2.25rem; }
 .pin-gate h2 { font-size: 1.9rem; letter-spacing: -0.045em; font-weight: 600; }
 .pin-gate .pin-input { background: rgba(245,242,236,.08); border-color: rgba(245,242,236,.22); }
 /* phone, after the PIN, while setting up: the brand header without the status pill */
@@ -204,9 +212,7 @@ body.pin-locked main { display: flex; align-items: center; min-height: 100vh; }
 body.phone-setup .top, body.phone-setup .foot, body.phone-setup .grid > :not(#wifi-card) { display: none !important; }
 body.phone-setup main { padding-top: 32px; }
 body.phone-setup .grid { grid-template-columns: 1fr; }
-.setup-phone .op-lockup { display: none; }
 body.phone-setup .setup-phone { display: block; background: none; border: 0; padding: 0 4px; margin-bottom: 20px; }
-body.phone-setup .setup-phone .op-lockup { display: block; width: 112px; margin-bottom: 1.75rem; }
 body.phone-setup .setup-phone strong { font-size: 1.5rem; letter-spacing: -0.04em; font-weight: 600; display: block; }
 
 /* C&G #209: Shut down. The power row is the one part of the settings card a phone sees after the PIN. */
@@ -218,7 +224,7 @@ body.phone-setup #settings-card .actions [data-action="restart-browser"] { displ
 .power-off { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 18px; padding: 24px; text-align: center; background: var(--bg); color: var(--paper); }
 .power-off.hidden { display: none; }
-.power-off .op-lockup { width: clamp(140px, 22vw, 260px); }
+.power-off .dp-brand { justify-content: center; font-size: clamp(1.6rem, 3vw, 3rem); }
 .power-off h2 { margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); letter-spacing: -0.04em; }
 .power-off p { margin: 0; max-width: 32ch; font-size: clamp(1.1rem, 2.2vw, 1.6rem); color: var(--muted); }
 body.powering-off main > :not(#power-off), body.powering-off .top, body.powering-off .foot { display: none !important; }
@@ -228,16 +234,16 @@ body.powering-off main > #power-off:not(.hidden) { display: flex !important; }
    Drawn in proportions only (%, vw), so the Plymouth picture rendered from it at 1920x1080
    matches it at any 16:9 resolution and the handoff from Plymouth to cog does not jump. */
 .boot-splash { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
-  background:
-    radial-gradient(ellipse 60% 55% at 8% -6%, rgba(40,96,160,.45), transparent),
-    radial-gradient(ellipse 52% 46% at 96% 110%, rgba(242,167,184,.10), transparent),
-    linear-gradient(135deg, #0C3866 0%, #052444 48%, #031C36 100%);
-  transition: opacity .9s ease; }
-.boot-splash .boot-logo { width: 14vw; animation: boot-pulse 2.4s ease-in-out infinite alternate; }
+  background: var(--ground-dramatic); transition: opacity .9s ease; }
+/* C&G #209 v8.4 (Shaun 09:53 CET): no logo, no ORIONPATH; "Setting up, please wait..." and a progress bar */
+.boot-box { display: flex; flex-direction: column; align-items: center; gap: 3.4vh; }
+.boot-text { margin: 0; font-size: 2.1vw; font-weight: 500; letter-spacing: -0.03em; color: var(--paper); }
+.boot-bar { width: 26vw; height: 0.7vh; min-height: 5px; border-radius: 99px; overflow: hidden;
+  background: rgba(245,242,236,.16); }
+.boot-bar i { display: block; height: 100%; width: var(--boot-p, 60%); border-radius: inherit;
+  background: linear-gradient(90deg, var(--paper) 0%, var(--pink-hi) 60%, var(--pink) 100%);
+  transition: width .8s ease; }
 .boot-splash.gone { opacity: 0; pointer-events: none; }
-.boot-splash.gone .boot-logo { animation: none; }
-@keyframes boot-pulse { from { opacity: .55; } to { opacity: 1; } }
-body.splash-still .boot-logo { animation: none; }
 
 /* venue join progress and result (C&G #209 v8.3) */
 .join-banner { display: block; font-size: 1.25rem; }
@@ -247,3 +253,14 @@ body.splash-still .boot-logo { animation: none; }
   background: rgba(229, 72, 77, 0.12); font-size: 1.05em; line-height: 1.35; }
 body.setup-mode .join-line { font-size: clamp(1.1rem, 1.6vw, 1.5rem); max-width: 40ch; }
 .drop-note { margin: 0.8em 0; padding: 0.8em 0.9em; border-radius: 8px; background: rgba(255, 255, 255, 0.08); line-height: 1.4; }
+
+/* Display Player name with the icon only (Shaun, 17 Nov 09:53 CET: "remove orionpath text just icon") */
+.dp-brand { display: flex; align-items: center; gap: 0.55em; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.04em; }
+.dp-mark { display: block; width: 1.75em; aspect-ratio: 321 / 291; flex: none;
+  background: url("brand/mark-300.png") no-repeat center / contain; }
+@supports ((-webkit-mask-image: none) or (mask-image: none)) {
+  .dp-mark { background: linear-gradient(160deg, #FFFFFF 0%, var(--paper) 38%, var(--pink-hi) 72%, var(--pink) 100%);
+    -webkit-mask: url("brand/mark-300.png") no-repeat center / contain; mask: url("brand/mark-300.png") no-repeat center / contain; }
+}
+.setup-phone .dp-brand { display: none; }
+body.phone-setup .setup-phone .dp-brand { display: flex; margin-bottom: 1.75rem; }

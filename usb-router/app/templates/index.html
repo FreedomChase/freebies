@@ -3,21 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>USB Router</title>
+<title>Display Player</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-mock="{{ 'true' if mock else 'false' }}"{% if screen %} class="booting"{% endif %}>
 {% if screen %}
 <!-- C&G #209 v8.2: the boot splash (same picture as the Plymouth theme) until the screen has
      something to show: the QR setup screen, the content, or after a while the page as it stands -->
-<div id="boot-splash" class="boot-splash" aria-hidden="true"><div class="op-lockup boot-logo"></div></div>
+<div id="boot-splash" class="boot-splash" role="status"><div class="boot-box">
+  <p class="boot-text">Setting up, please wait…</p>
+  <div class="boot-bar"><i id="boot-fill"></i></div>
+</div></div>
 {% endif %}
 
 <header class="top">
   <div class="brand">
     <span class="op-mark" aria-hidden="true"></span>
     <div>
-      <h1>USB Router <span id="device-label" class="device-label"></span></h1>
+      <h1>Display Player <span id="device-label" class="device-label"></span></h1>
       <p class="sub">Connect this screen to the internet, then it shows your content.</p>
     </div>
   </div>
@@ -29,13 +32,13 @@
 <main>
   <!-- Phone side: the PIN comes before anything else (S&D #193) -->
   <section id="power-off" class="power-off hidden" role="alert" aria-live="assertive">
-    <div class="op-lockup" role="img" aria-label="ORIONPATH"></div>
+    <div class="dp-brand"><span class="dp-mark" aria-hidden="true"></span><span class="dp-name">Display Player</span></div>
     <h2>Shutting down</h2>
     <p>Safe to unplug when the green light stops blinking.</p>
   </section>
 
   <section id="pin-gate" class="card pin-gate hidden" aria-labelledby="pin-gate-title">
-    <div class="op-lockup" role="img" aria-label="ORIONPATH"></div>
+    <div class="dp-brand"><span class="dp-mark" aria-hidden="true"></span><span class="dp-name">Display Player</span></div>
     <h2 id="pin-gate-title">Enter the admin PIN</h2>
     <p class="muted">This screen is locked. Type the admin PIN to set it up.</p>
     <form id="pin-gate-form" autocomplete="off">
@@ -48,7 +51,7 @@
 
   <!-- Phone-based setup (no keyboard on the screen): QR first (S&D #193) -->
   <section id="setup-card" class="card setup setup-qr hidden">
-    <div class="op-lockup" role="img" aria-label="ORIONPATH"></div>
+    <div class="dp-brand"><span class="dp-mark" aria-hidden="true"></span><span class="dp-name">Display Player</span></div>
     <figure class="qr-big">
       <img id="qr-wifi" alt="QR code to join the setup Wi-Fi" width="360" height="360">
     </figure>
@@ -75,7 +78,7 @@
 
   <!-- Phone side of the setup hotspot (the captive page lands here) -->
   <section id="setup-phone" class="banner setup-phone hidden">
-    <div class="op-lockup" role="img" aria-label="ORIONPATH"></div>
+    <div class="dp-brand"><span class="dp-mark" aria-hidden="true"></span><span class="dp-name">Display Player</span></div>
     <div>
       <strong>You are connected to the screen.</strong>
       <p>Pick the venue's Wi-Fi below and type its password.</p>
