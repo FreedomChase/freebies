@@ -1,0 +1,13 @@
+name = "feedback-box"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# Not deployed. Going live (a new public endpoint) is Shaun's word.
+# To deploy: wrangler d1 create feedback-box, put the id below, wrangler d1 migrations apply feedback-box --remote,
+# wrangler secret put VIEW_KEY, wrangler deploy.
+[[d1_databases]]
+binding = "DB"
+database_name = "feedback-box"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
