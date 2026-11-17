@@ -41,14 +41,16 @@ wait_up 8788
 page_check 8788 503 "Counts not available" /w/out/count-error.html
 kill $NOSTORE
 
-npx wrangler d1 migrations apply feedback-box --local >/tmp/mig.log 2>&1 || { cat /tmp/mig.log; exit 1; }
-# Empty state: tables, no presses yet.
-npx wrangler dev --local --ip 127.0.0.1 --port 8789 --var "VIEW_KEY:$VIEW_KEY" >/tmp/dev8789.log 2>&1 &
+# Empty state: tables, no presses yet, in a store of its own so nothing persisted can leak in.
+npx wrangler d1 migrations apply feedback-box --local --persist-to /tmp/emptystore >/tmp/mig0.log 2>&1 || { cat /tmp/mig0.log; exit 1; }
+npx wrangler dev --local --ip 127.0.0.1 --port 8789 --persist-to /tmp/emptystore --var "VIEW_KEY:$VIEW_KEY" >/tmp/dev8789.log 2>&1 &
 EMPTY=$!
 wait_up 8789
 page_check 8789 200 "No presses yet" /w/out/count-empty.html
 kill $EMPTY
 sleep 1
+
+npx wrangler d1 migrations apply feedback-box --local >/tmp/mig.log 2>&1 || { cat /tmp/mig.log; exit 1; }
 npx wrangler d1 execute feedback-box --local --file /tmp/demo.sql >/tmp/seed.log 2>&1 || { cat /tmp/seed.log; exit 1; }
 npx wrangler dev --local --ip 127.0.0.1 --port 8787 --var "VIEW_KEY:$VIEW_KEY" >/tmp/dev.log 2>&1 &
 i=0

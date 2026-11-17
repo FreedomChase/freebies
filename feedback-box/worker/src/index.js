@@ -118,7 +118,7 @@ async function countPage(url, env) {
   } catch (err) {
     console.log("count query failed: " + err);
     return page(
-      `<section class="card warn"><h2>Counts not available</h2><p>The count store did not answer. Presses are not lost: each box keeps them and sends them again. Reload in a minute.</p></section>`,
+      `<h1>Feedback counts, last 7 days</h1><section class="card warn"><h2>Counts not available</h2><p>The count store did not answer. Presses are not lost: each box keeps them and sends them again. Reload in a minute.</p></section>`,
       503
     );
   }
