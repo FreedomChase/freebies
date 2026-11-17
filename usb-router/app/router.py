@@ -198,8 +198,11 @@ class Router:
             return self.status()
 
     def restart(self):
+        # keep the role: a password change while sharing must come back sharing (NAT on),
+        # and a setup hotspot stays a setup hotspot (C&G #210)
+        role = self.role or "manual"
         self.stop(manual=False)
-        return self.start()
+        return self.start(role=role)
 
     def status(self, online=None, local=False):
         s = self.nm.hotspot_status()

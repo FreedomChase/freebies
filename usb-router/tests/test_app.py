@@ -741,3 +741,22 @@ def test_rotate_replaces_a_configured_password_and_pin(client, tmp_path):
     pin = srv.cfg.rotate_secret("admin_pin")
     assert srv.cfg.admin_pin() == pin != "246810"
     assert srv.cfg.admin_pin_source() == "new"
+
+
+def test_restart_keeps_the_share_and_setup_role(client):
+    """C&G #210: a password change while sharing restarted the hotspot as role manual,
+    so it came back without share=True (no NAT) and the role was lost."""
+    srv, rt = client.server, client.server.router
+    calls = []
+    real = srv.nm.hotspot_start
+    srv.nm.hotspot_start = lambda iface, ssid, pw, band="bg", **kw: (calls.append(kw.get("share", False)), real(iface, ssid, pw, band, **kw))
+    rt.start(role="share")
+    assert calls[-1] is True and rt.role == "share"
+    assert client.post("/api/settings", json={"hotspot_password": "share-pass-55"}).status_code == 200
+    assert calls[-1] is True and rt.role == "share"
+    client.post("/api/secrets/rotate", json={"name": "hotspot_password"})
+    assert calls[-1] is True and rt.role == "share"
+    rt.stop(manual=False)
+    rt.start(role="setup")
+    rt.restart()
+    assert calls[-1] is False and rt.role == "setup"
