@@ -83,7 +83,7 @@ class Cog:
         self.proc = None
 
     def command(self, url):
-        cmd = [self.cog, f"--platform={self.platform}", "--bg-color=#0e1116",
+        cmd = [self.cog, f"--platform={self.platform}", "--bg-color=#052444",
                "--webprocess-failure=restart"]
         if self.mem_limit:
             cmd.append(f"--web-mem-limit={int(self.mem_limit)}")

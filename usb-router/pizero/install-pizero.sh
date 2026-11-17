@@ -28,6 +28,8 @@ apt-get update
 PKGS="network-manager dnsmasq-base hostapd nftables iw wireless-regdb python3 python3-flask python3-qrcode python3-pil curl zram-tools"
 # the screen: cog (WPE WebKit) on DRM, no X server, no window manager
 [ "$KIOSK" -eq 1 ] && PKGS="$PKGS cog libgles2 libegl1 dbus-user-session fonts-dejavu-core"
+# the boot splash: plymouth (script plug-in) shows the ORIONPATH splash instead of boot text (C&G #209)
+[ "$KIOSK" -eq 1 ] && PKGS="$PKGS plymouth"
 # shellcheck disable=SC2086
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $PKGS
 
@@ -97,6 +99,12 @@ chown kiosk:netdev /var/lib/usb-router/captive-dns.conf 2>/dev/null || true
 chmod 644 /var/lib/usb-router/captive-dns.conf
 ln -sfn /var/lib/usb-router/captive-dns.conf /etc/NetworkManager/dnsmasq-shared.d/usb-router-captive.conf
 [ "$KIOSK" -eq 1 ] && install -m 644 "$HERE/pizero/usb-router-kiosk.service" /etc/systemd/system/
+if [ "$KIOSK" -eq 1 ]; then
+  echo "==> quiet boot (splash, no boot text on the screen)"
+  "$HERE/pizero/quiet-boot.sh" / "$BOOT"
+  # plymouth's own hook may have put it in the initramfs: rebuild so it carries this theme
+  command -v update-initramfs >/dev/null && update-initramfs -u || true
+fi
 
 echo "==> memory (512 MB)"
 # compressed swap in RAM instead of a swap file on the SD card

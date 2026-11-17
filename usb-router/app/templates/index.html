@@ -6,7 +6,12 @@
 <title>USB Router</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body data-mock="{{ 'true' if mock else 'false' }}">
+<body data-mock="{{ 'true' if mock else 'false' }}"{% if screen %} class="booting"{% endif %}>
+{% if screen %}
+<!-- C&G #209 v8.2: the boot splash (same picture as the Plymouth theme) until the screen has
+     something to show: the QR setup screen, the content, or after a while the page as it stands -->
+<div id="boot-splash" class="boot-splash" aria-hidden="true"><div class="op-lockup boot-logo"></div></div>
+{% endif %}
 
 <header class="top">
   <div class="brand">

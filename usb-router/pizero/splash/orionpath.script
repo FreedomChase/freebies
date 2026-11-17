@@ -1,0 +1,27 @@
+# ORIONPATH boot splash (C&G #209 v8.2). bg.png and logo.png are rendered from the setup page's
+# .boot-splash (splash/render.py), so the handoff to the page's own splash does not jump.
+# Cheap on a Pi Zero: one scaled background, one small sprite whose opacity changes.
+Window.SetBackgroundTopColor(0.047, 0.220, 0.400);
+Window.SetBackgroundBottomColor(0.012, 0.110, 0.212);
+W = Window.GetWidth();
+H = Window.GetHeight();
+bg = Sprite(Image("bg.png").Scale(W, H));
+bg.SetPosition(Window.GetX(), Window.GetY(), -10);
+src = Image("logo.png");
+lw = Math.Int(W * 0.14);
+lh = Math.Int(lw * src.GetHeight() / src.GetWidth());
+logo = Sprite(src.Scale(lw, lh));
+logo.SetPosition(Window.GetX() + Math.Int((W - lw) / 2), Window.GetY() + Math.Int((H - lh) / 2), 10);
+logo.SetOpacity(0.55);
+# the page pulses .55 -> 1 in 2.4 s and back (ease-in-out, alternate): a 4.8 s cosine at 50 frames/s
+# inside a function a plain name is local: the frame counter and the sprite are reached as global.
+t = 0;
+fun refresh() {
+  global.t = global.t + 1;
+  global.logo.SetOpacity(0.775 - 0.225 * Math.Cos(global.t * 2 * 3.14159 / 240));
+}
+Plymouth.SetRefreshFunction(refresh);
+# no text of any kind: messages, prompts and status are not drawn
+fun quiet(text) { }
+Plymouth.SetMessageFunction(quiet);
+Plymouth.SetUpdateStatusFunction(quiet);

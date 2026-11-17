@@ -62,6 +62,7 @@
     renderGate(s);
     renderPin(s);
     renderSetup(s);
+    renderSplash(s);
     renderFleet(s);
     $("portal-open").onclick = () => api("/api/browser/go", { method: "POST", body: { url: s.portal_url || "http://neverssl.com" } })
       .catch((e) => toast(e.message, "bad"));
@@ -183,8 +184,32 @@
     // the clean screen hides it; it comes back when a phone was refused, or with the D key
     $("setup-diag").classList.toggle("show", s.local && (diagKey || !!(h.diag && h.diag.refused)));
   };
+  /* ---------------- boot splash (C&G #209 v8.2) ----------------
+     On the screen only. It stays until there is something to show: the QR setup screen; the
+     content (online: the kiosk navigates away, so it only goes after ONLINE_HOLD in case the kiosk
+     stays here); a hotspot error; the D key; or SPLASH_MAX, after which the page shows as it stands
+     so a fault is never hidden for good. */
+  const SPLASH_MAX = 240000, ONLINE_HOLD = 20000, splashStart = Date.now();
+  let onlineSince = null;
+  const hideSplash = () => {
+    const el = $("boot-splash");
+    if (!el || el.classList.contains("gone")) return;
+    el.classList.add("gone");
+    document.body.classList.remove("booting");
+    setTimeout(() => el.remove(), 1000);
+  };
+  const renderSplash = (s) => {
+    if (!$("boot-splash")) return;
+    if (s.online) { onlineSince = onlineSince || Date.now(); } else { onlineSince = null; }
+    if (document.body.classList.contains("setup-mode") || (s.hotspot && s.hotspot.last_error)
+        || (onlineSince && Date.now() - onlineSince > ONLINE_HOLD) || Date.now() - splashStart > SPLASH_MAX) {
+      hideSplash();
+    }
+  };
+  if ($("boot-splash")) setTimeout(hideSplash, SPLASH_MAX + 1000);
   let diagKey = false;
   document.addEventListener("keydown", (e) => {
+    if ((e.key === "d" || e.key === "D") && $("boot-splash")) hideSplash();
     if ((e.key === "d" || e.key === "D") && document.body.classList.contains("setup-mode")
         && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) {
       diagKey = !diagKey; $("setup-diag").classList.toggle("show", diagKey);

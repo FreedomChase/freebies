@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=ORIONPATH
+Description=ORIONPATH boot splash for the display player (C&G #209 v8.2): the setup screen's ground and logo, pulsing
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/orionpath
+ScriptFile=/usr/share/plymouth/themes/orionpath/orionpath.script

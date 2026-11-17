@@ -223,3 +223,18 @@ body.phone-setup #settings-card .actions [data-action="restart-browser"] { displ
 .power-off p { margin: 0; max-width: 32ch; font-size: clamp(1.1rem, 2.2vw, 1.6rem); color: var(--muted); }
 body.powering-off main > :not(#power-off), body.powering-off .top, body.powering-off .foot { display: none !important; }
 body.powering-off main > #power-off:not(.hidden) { display: flex !important; }
+
+/* ---------------- boot splash (C&G #209 v8.2) ----------------
+   Drawn in proportions only (%, vw), so the Plymouth picture rendered from it at 1920x1080
+   matches it at any 16:9 resolution and the handoff from Plymouth to cog does not jump. */
+.boot-splash { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(ellipse 60% 55% at 8% -6%, rgba(40,96,160,.45), transparent),
+    radial-gradient(ellipse 52% 46% at 96% 110%, rgba(242,167,184,.10), transparent),
+    linear-gradient(135deg, #0C3866 0%, #052444 48%, #031C36 100%);
+  transition: opacity .9s ease; }
+.boot-splash .boot-logo { width: 14vw; animation: boot-pulse 2.4s ease-in-out infinite alternate; }
+.boot-splash.gone { opacity: 0; pointer-events: none; }
+.boot-splash.gone .boot-logo { animation: none; }
+@keyframes boot-pulse { from { opacity: .55; } to { opacity: 1; } }
+body.splash-still .boot-logo { animation: none; }

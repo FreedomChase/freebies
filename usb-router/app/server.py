@@ -222,7 +222,7 @@ def fail(msg, code=400):
 # --------------------------------------------------------------------------
 @app.get("/")
 def index():
-    return render_template("index.html", settings=cfg.public(local=_is_local()), mock=MOCK)
+    return render_template("index.html", settings=cfg.public(local=_is_local()), mock=MOCK, screen=_is_local())
 
 
 @app.get("/healthz")

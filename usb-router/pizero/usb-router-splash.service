@@ -1,0 +1,15 @@
+[Unit]
+Description=USB Router: hand the boot splash to the kiosk once the connection manager answers (C&G #209)
+After=usb-router-connect.service plymouth-start.service
+Wants=usb-router-connect.service
+Before=usb-router-kiosk.service
+ConditionPathExists=/usr/bin/plymouth
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=150
+ExecStart=/opt/usb-router/pizero/splash-handoff.sh
+
+[Install]
+WantedBy=multi-user.target
