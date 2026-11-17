@@ -62,7 +62,7 @@ admin_pin =
 # Share the internet connection with nearby devices once online (opt-in).
 # Needs a spare adapter: a second Wi-Fi card or an Ethernet port.
 hotspot_enabled = false
-hotspot_ssid = USB-Router
+hotspot_ssid = Display Player
 # bg = 2.4 GHz (works with every phone), a = 5 GHz
 hotspot_band = bg
 

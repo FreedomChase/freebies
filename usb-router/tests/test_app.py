@@ -120,7 +120,7 @@ def test_hotspot_requires_uplink_then_starts(client):
     assert r.status_code == 200
     h = r.get_json()["hotspot"]
     assert h["active"] and h["iface"] in ("wlan0", "wlan1") and h["mode"] == "wifi"
-    assert h["ssid"] == "USB-Router"
+    assert h["ssid"] == "Display Player"
 
     r = client.post("/api/hotspot", json={"action": "stop"}).get_json()
     assert r["hotspot"]["active"] is False
@@ -356,6 +356,29 @@ def test_fleet_dashboard_roundtrip(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------- secrets / hotspot --
+def test_hotspot_name_usb_router_becomes_display_player(tmp_path, monkeypatch):
+    """C&G #209 v8.5: the old default name in a conf or saved setting reads as the new one."""
+    monkeypatch.setenv("USB_ROUTER_MOCK", "1")
+    monkeypatch.setenv("USB_ROUTER_STATE_DIR", str(tmp_path))
+    monkeypatch.delenv("USB_ROUTER_HOTSPOT_SSID", raising=False)
+    conf = tmp_path / "usb-router.conf"
+    monkeypatch.setenv("USB_ROUTER_CONF", str(conf))
+    sys.modules.pop("config", None)
+    config = importlib.import_module("config")
+    assert config.Config().get("hotspot_ssid") == "Display Player"          # nothing set: new default
+    conf.write_text("[usb-router]\nhotspot_ssid = USB-Router\n")
+    assert config.Config().get("hotspot_ssid") == "Display Player"          # old conf: migrated
+    assert conf.read_text() == "[usb-router]\nhotspot_ssid = USB-Router\n"  # the file is not touched
+    conf.write_text("[usb-router]\nhotspot_ssid = Bar Screen\n")
+    assert config.Config().get("hotspot_ssid") == "Bar Screen"              # a chosen name is kept
+    conf.unlink()
+    (tmp_path / "settings.json").write_text('{"hotspot_ssid": "USB-Router"}')
+    assert config.Config().get("hotspot_ssid") == "Display Player"          # old saved setting: migrated
+    monkeypatch.setenv("USB_ROUTER_HOTSPOT_SSID", "USB-Router")
+    (tmp_path / "settings.json").unlink()
+    assert config.Config().get("hotspot_ssid") == "Display Player"          # old env value: migrated
+
+
 def test_generated_secrets_per_stick(tmp_path, monkeypatch):
     monkeypatch.setenv("USB_ROUTER_MOCK", "1")
     monkeypatch.setenv("USB_ROUTER_STATE_DIR", str(tmp_path))

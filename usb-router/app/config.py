@@ -39,7 +39,7 @@ DEFAULTS = {
     # -- phone-based setup when there is no keyboard: hotspot while offline
     "setup_hotspot": "true",
     "hotspot_enabled": "false",       # share the uplink once online (opt-in; the setup hotspot is separate)
-    "hotspot_ssid": "USB-Router",
+    "hotspot_ssid": "Display Player",
     "hotspot_password": "",           # blank = a unique random password is generated per stick at first boot
     "hotspot_band": "bg",             # bg = 2.4 GHz (widest compatibility), a = 5 GHz
     "hotspot_backend": "auto",        # auto = hostapd when the image has it (the Pi, S&D #193), else NetworkManager
@@ -98,6 +98,7 @@ class Config:
         self.settings_path = self.state_dir / "settings.json"
         self.secrets_path = self.state_dir / "secrets.json"
         self._load_settings()
+        self._migrate()
         self.secrets = {}
         self._load_secrets()
         self.ensure_secrets()
@@ -124,6 +125,16 @@ class Config:
             env_key = "USB_ROUTER_" + key.upper()
             if env_key in os.environ:
                 self.values[key] = os.environ[env_key]
+
+    # C&G #209 v8.5: the hotspot was called USB-Router until 17 Nov (Shaun: "we can change to
+    # Display Player"). A conf or saved setting that still holds that old default is read as the
+    # new name, in memory only, so no file on an installed screen has to be edited. Any other
+    # name someone chose is kept.
+    OLD_SSIDS = ("USB-Router",)
+
+    def _migrate(self):
+        if self.values.get("hotspot_ssid", "").strip() in self.OLD_SSIDS:
+            self.values["hotspot_ssid"] = DEFAULTS["hotspot_ssid"]
 
     def _load_settings(self):
         try:

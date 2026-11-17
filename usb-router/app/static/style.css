@@ -252,6 +252,12 @@ body.powering-off main > #power-off:not(.hidden) { display: flex !important; }
   background: linear-gradient(90deg, var(--paper) 0%, var(--pink-hi) 60%, var(--pink) 100%);
   transition: width .8s ease; }
 .boot-splash.gone { opacity: 0; pointer-events: none; }
+/* C&G #209 v8.5: the join screen reuses the splash look; its bar is driven by --join-p */
+.join-screen .boot-bar i { width: var(--join-p, 10%); }
+.join-screen.bad .boot-bar { display: none; }
+.join-screen .boot-text { max-width: 70vw; text-align: center; }
+.join-sub { margin: -1.6vh 0 0; max-width: 60vw; text-align: center; font-size: 1.4vw; line-height: 1.35;
+  color: rgba(245,242,236,.78); }
 
 /* venue join progress and result (C&G #209 v8.3) */
 .join-banner { display: block; font-size: 1.25rem; }

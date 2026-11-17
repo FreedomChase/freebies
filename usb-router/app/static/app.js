@@ -188,7 +188,9 @@
     }
     $("setup-ssid").textContent = h.ssid || "";
     // no hotspot password in text anywhere (Shaun, 17 Nov): the QR carries it
-    const showPin = s.local && s.settings.admin_pin_source !== "default" && !!s.settings.admin_pin;
+    // C&G #209 v8.5: and none after a failed join either (the QR card then shows only the reason)
+    const showPin = s.local && s.settings.admin_pin_source !== "default" && !!s.settings.admin_pin
+      && !(s.join && s.join.ok === false);
     $("setup-pin-wrap").classList.toggle("hidden", !showPin);
     $("setup-pin").textContent = showPin ? s.settings.admin_pin : "";
     $("setup-url").textContent = h.ui_url || ""; $("setup-id").textContent = s.device.id;
@@ -213,8 +215,39 @@
         + (j.trail && j.trail.length ? `<br><small class="muted">radio: ${esc(j.trail.join(" → "))}</small>` : "")
       : `Joined <strong>${esc(j.ssid)}</strong>.`;
     line.classList.toggle("hidden", !(s.local && failed));
-    if (failed) line.innerHTML = `Last try: <strong>${esc(j.ssid)}</strong> did not join: ${esc(j.reason || "unknown reason")}. Scan the code to try again.`
-      + (j.trail && j.trail.length ? `<br><small>radio: ${esc(j.trail.join(" → "))}</small>` : "");
+    if (failed) line.innerHTML = `Last try: <strong>${esc(j.ssid)}</strong> did not join: ${esc(j.reason || "unknown reason")}. Scan the code to try again.`;
+    renderJoinScreen(s, setupShowing);
+  };
+  /* C&G #209 v8.5: on the screen a join shows only a clean full-screen state (icon, the venue's
+     name, a bar), never the admin page under it. It covers: the join running; a failure until the
+     setup QR is back (then the QR card says why); a join that worked until the content opens.
+     Bounded in time so a fault is never hidden for good, and the D key shows the page. */
+  const JOIN_HOLD = 90000;
+  let joinKeyShow = false, joinFillTimer = null;
+  const joinFill = (p) => { const el = $("join-screen"); if (el) el.style.setProperty("--join-p", `${p}%`); };
+  const renderJoinScreen = (s, setupShowing) => {
+    const el = $("join-screen");
+    if (!el) return;
+    const j = s.join, running = j && j.ok === null, failed = j && j.ok === false;
+    const recent = j && Date.now() / 1000 - (j.at || 0) < JOIN_HOLD / 1000;
+    const on = !!(s.local && j && !setupShowing && !joinKeyShow && (running || recent));
+    el.classList.toggle("hidden", !on);
+    document.body.classList.toggle("joining", on);
+    el.classList.toggle("bad", !!(on && failed));
+    if (!on) { clearInterval(joinFillTimer); joinFillTimer = null; joinFill(10); return; }
+    $("join-text").textContent = running ? `Connecting to ${j.ssid}…`
+      : failed ? `${j.ssid} did not connect` : `Connected to ${j.ssid}`;
+    const why = j.reason || "unknown reason";
+    const sub = failed ? `${why[0].toUpperCase()}${why.slice(1)}. Opening setup again…`
+      : running ? "" : "Opening your content…";
+    $("join-sub").textContent = sub; $("join-sub").classList.toggle("hidden", !sub);
+    if (running && !joinFillTimer) {
+      joinFillTimer = setInterval(() => {
+        const now = parseFloat($("join-screen").style.getPropertyValue("--join-p")) || 10;
+        joinFill(Math.min(90, now + (90 - now) * 0.05));
+      }, 1000);
+    }
+    if (!running) { clearInterval(joinFillTimer); joinFillTimer = null; if (!failed) joinFill(100); }
   };
   /* ---------------- boot splash (C&G #209 v8.2) ----------------
      On the screen only. It stays until there is something to show: the QR setup screen; the
@@ -255,6 +288,9 @@
   let diagKey = false;
   document.addEventListener("keydown", (e) => {
     if ((e.key === "d" || e.key === "D") && $("boot-splash")) hideSplash();
+    if ((e.key === "d" || e.key === "D") && document.body.classList.contains("joining")) {
+      joinKeyShow = true; $("join-screen").classList.add("hidden"); document.body.classList.remove("joining");
+    }
     if ((e.key === "d" || e.key === "D") && document.body.classList.contains("setup-mode")
         && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) {
       diagKey = !diagKey; $("setup-diag").classList.toggle("show", diagKey);

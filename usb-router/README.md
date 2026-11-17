@@ -166,7 +166,7 @@ All keys are in `config/usb-router.conf.example`. The important ones:
 | `setup_hotspot` | `true` | Broadcast while offline and unconfigured so a phone can set the screen up |
 | `hotspot_password` | blank = generated per stick | Hotspot password. Weak values (`changeme…`, `password`, `12345678`) are refused |
 | `admin_pin` | blank = image default PIN, else generated per stick | PIN required for every change; a generated or New PIN is shown on the screen only, the default never |
-| `hotspot_enabled`, `hotspot_ssid`, `hotspot_band` | `false`, `USB-Router`, `bg` | Share the connection with nearby devices once online (opt-in) |
+| `hotspot_enabled`, `hotspot_ssid`, `hotspot_band` | `false`, `Display Player`, `bg` | Share the connection with nearby devices once online (opt-in) |
 | `lan_access` | `true` | Serve the setup page to hotspot clients (PIN still required) |
 | `fleet_url`, `fleet_token`, `fleet_interval` | empty, empty, 60 | Fleet dashboard. No token = the client stays off |
 | `allow_exit` | `false` | Quit button / Ctrl+Q |

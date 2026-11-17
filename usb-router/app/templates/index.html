@@ -15,6 +15,14 @@
   <p class="boot-text">Setting up, please wait…</p>
   <div class="boot-bar"><i id="boot-fill"></i></div>
 </div></div>
+<!-- C&G #209 v8.5: while the screen joins the venue Wi-Fi it shows only this, never the admin page
+     (Shaun, 17 Nov: "reveals diagnostics again. Hide that completely"); D shows the page -->
+<div id="join-screen" class="boot-splash join-screen hidden" role="status" aria-live="polite"><div class="boot-box">
+  <span class="dp-mark boot-mark" aria-hidden="true"></span>
+  <p class="boot-text" id="join-text"></p>
+  <p class="join-sub hidden" id="join-sub"></p>
+  <div class="boot-bar"><i></i></div>
+</div></div>
 {% endif %}
 
 <header class="top">
