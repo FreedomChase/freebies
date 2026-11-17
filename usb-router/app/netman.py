@@ -9,6 +9,7 @@ as '\\:' so we split on unescaped colons only.
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -19,6 +20,9 @@ import urllib.error
 import urllib.request
 
 NMCLI_TIMEOUT = 40
+
+
+log = logging.getLogger("usb-router.netman")
 
 
 class NetError(Exception):
@@ -565,9 +569,121 @@ class HostapdNetworkManager(NetworkManager):
     UNIT = "usb-router-hotspot.service"
     LEASES = "/run/usb-router-ap/leases"
 
-    def __init__(self, state_dir=None):
+    SCAN_FILE = "/run/usb-router-ap/scan.json"
+    HANDBACK_WAIT = 20                # s for NetworkManager to take wlan0 back and see networks
+    JOIN_BUSY = 150                   # s the keeper leaves the radio alone during a venue join
+
+    def __init__(self, state_dir=None, scan_file=None):
         self.state_dir = state_dir or os.environ.get("USB_ROUTER_STATE_DIR", "/var/lib/usb-router")
         self.request_path = os.path.join(self.state_dir, "hotspot-ap.json")
+        self.scan_request = os.path.join(self.state_dir, "scan-request")
+        self.scan_file = scan_file or self.SCAN_FILE
+        self._busy_until = 0.0
+        self.sleep = time.sleep
+
+    def busy(self):
+        """True while a venue join owns the radio: the keeper must not start the hotspot (C&G #209)."""
+        return time.time() < self._busy_until
+
+    # -- devices: say "hotspot", not "unmanaged", for the radio hostapd holds ------------------
+    def devices(self):
+        devs = super().devices()
+        active = None
+        for d in devs:
+            if d["type"] == "wifi" and d["state"] == "unmanaged":
+                if active is None:
+                    active = self._unit_active()
+                req_iface = self._request().get("iface")
+                if active and d["iface"] == req_iface:
+                    d["state"] = "hotspot"
+                elif not active and d["iface"] == req_iface and not self.busy():
+                    # hostapd stopped without handing the radio back (crash, reboot mid-switch)
+                    nmcli("device", "set", d["iface"], "managed", "yes", check=False)
+                    d["state"] = "disconnected"
+        return devs
+
+    # -- scan: NetworkManager cannot scan a radio hostapd holds; the root helper's list instead --
+    def _scan_from_helper(self):
+        try:
+            with open(self.scan_file, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return None, {}
+        nets = [n for n in data.get("networks") or [] if isinstance(n, dict) and n.get("ssid")]
+        return nets, data
+
+    def wifi_scan(self, rescan=True):
+        if not self._unit_active():
+            return super().wifi_scan(rescan)
+        nets, data = self._scan_from_helper()
+        if rescan:
+            before = data.get("at", 0)
+            try:
+                with open(self.scan_request, "w") as f:
+                    f.write(str(time.time()))
+            except OSError:
+                pass
+            for _ in range(16):           # the helper rescans at most every 30 s; wait up to 8 s
+                self.sleep(0.5)
+                fresh, d2 = self._scan_from_helper()
+                if d2.get("at", 0) > before:
+                    nets = fresh
+                    break
+        nets = sorted(nets or [], key=lambda n: -int(n.get("signal") or 0))
+        return nets
+
+    def _handback(self, iface, ssid):
+        """Stop hostapd, give iface back to NetworkManager, wait until it can see ssid."""
+        _run(["systemctl", "stop", self.UNIT], timeout=30, check=False)
+        nmcli("device", "set", iface, "managed", "yes", check=False)
+        deadline = time.time() + self.HANDBACK_WAIT
+        while time.time() < deadline:
+            states = {d["iface"]: d["state"] for d in NetworkManager.devices(self)}
+            if states.get(iface) not in (None, "unmanaged", "unavailable"):
+                break
+            self.sleep(0.5)
+        while time.time() < deadline:
+            try:
+                if any(n["ssid"] == ssid for n in NetworkManager.wifi_scan(self, rescan=True)):
+                    return True
+            except NetError:
+                pass
+            self.sleep(1)
+        return False
+
+    def wifi_connect(self, ssid, password=None, iface=None):
+        """
+        Join the venue Wi-Fi from the setup hotspot (C&G #209): hostapd holds the only radio, so
+        stop it, hand the radio back to NetworkManager, wait until it sees the network, join.
+        If the join fails, the setup hotspot comes back with the same settings, so the phone can
+        rejoin and try again.
+        """
+        if not ssid:
+            raise NetError("No network name given")
+        req = self._request()
+        from_ap = self._unit_active() and req.get("iface") and (not iface or iface == req.get("iface"))
+        if not from_ap:
+            return super().wifi_connect(ssid, password, iface)
+        ap_iface = req["iface"]
+        self._busy_until = time.time() + self.JOIN_BUSY
+        try:
+            saved_before = {c["name"] for c in self.saved_connections()}
+            seen = self._handback(ap_iface, ssid)
+            log.info("venue join: radio back with NetworkManager, %s %s", ssid,
+                     "seen" if seen else "not seen yet")
+            try:
+                super().wifi_connect(ssid, password, ap_iface)
+            except NetError:
+                if ssid not in saved_before:   # a failed first try must not count as "configured"
+                    nmcli("connection", "delete", ssid, check=False)
+                try:
+                    self.hotspot_start(ap_iface, req.get("ssid"), req.get("password"),
+                                       req.get("band") or "bg", share=bool(req.get("share")))
+                except NetError as e2:
+                    log.warning("setup hotspot did not come back after a failed join: %s", e2)
+                raise
+        finally:
+            self._busy_until = 0.0
 
     def _request(self):
         try:

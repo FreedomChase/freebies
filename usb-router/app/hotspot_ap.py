@@ -31,6 +31,12 @@ REQUEST = os.path.join(STATE_DIR, "hotspot-ap.json")
 CAPTIVE = os.path.join(STATE_DIR, "captive-dns.conf")
 RUN_DIR = "/run/usb-router-ap"
 LEASES = os.path.join(RUN_DIR, "leases")
+# v8.1 (C&G #209): NetworkManager lets go of the interface for hostapd, so it can no longer scan.
+# This helper scans as root before hostapd starts (and again when the app touches SCAN_REQUEST),
+# and writes what it saw to SCAN_FILE (0644) for the app's network list.
+SCAN_FILE = os.path.join(RUN_DIR, "scan.json")
+SCAN_REQUEST = os.path.join(STATE_DIR, "scan-request")
+RESCAN_MIN_GAP = 30
 UNIT = "usb-router-hotspot.service"
 ADDR, PREFIX = "10.42.0.1", 24
 DHCP_RANGE = "10.42.0.10,10.42.0.100,255.255.255.0,2h"
@@ -138,6 +144,106 @@ def dnsmasq_conf(v, captive_text=""):
     return "\n".join(lines) + "\n"
 
 
+def _iw_ssid(raw):
+    """iw prints non-printable SSID bytes as \\xNN; undo that and decode as UTF-8."""
+    out, i = bytearray(), 0
+    b = raw.encode("utf-8", "surrogateescape")
+    while i < len(b):
+        if b[i:i + 2] == b"\\x" and i + 4 <= len(b):
+            try:
+                out.append(int(b[i + 2:i + 4], 16))
+                i += 4
+                continue
+            except ValueError:
+                pass
+        out.append(b[i])
+        i += 1
+    return out.decode("utf-8", "replace")
+
+
+def parse_iw_scan(text):
+    """`iw dev X scan` output -> the app's network list (strongest BSSID per SSID, hidden ones dropped)."""
+    nets, cur = [], None
+    for line in (text or "").splitlines():
+        m = re.match(r"^BSS ([0-9a-fA-F:]{17})", line)
+        if m:
+            cur = {"bssid": m.group(1).lower(), "ssid": "", "dbm": -100.0, "freq": 0, "rsn": False,
+                   "wpa": False, "privacy": False, "sae": False, "psk": False, "in_use": False}
+            nets.append(cur)
+            continue
+        if cur is None:
+            continue
+        t = line.strip()
+        if t.startswith("SSID:"):
+            cur["ssid"] = _iw_ssid(t[5:].strip())
+        elif t.startswith("signal:"):
+            try:
+                cur["dbm"] = float(t.split()[1])
+            except (IndexError, ValueError):
+                pass
+        elif t.startswith("freq:"):
+            try:
+                cur["freq"] = int(float(t.split()[1]))
+            except (IndexError, ValueError):
+                pass
+        elif t.startswith("capability:") and "Privacy" in t:
+            cur["privacy"] = True
+        elif t.startswith("RSN:"):
+            cur["rsn"] = True
+        elif t.startswith("WPA:"):
+            cur["wpa"] = True
+        elif "Authentication suites:" in t:
+            cur["sae"] = cur["sae"] or "SAE" in t
+            cur["psk"] = cur["psk"] or bool(re.search(r"\bPSK\b", t))
+    best = {}
+    for n in nets:
+        if not n["ssid"]:
+            continue
+        signal = max(0, min(100, int(round(2 * (n["dbm"] + 100)))))
+        if n["rsn"] and n["sae"]:
+            sec = "WPA2 WPA3" if n["psk"] else "WPA3"
+        elif n["rsn"]:
+            sec = "WPA2"
+        elif n["wpa"]:
+            sec = "WPA1"
+        elif n["privacy"]:
+            sec = "WEP"
+        else:
+            sec = ""
+        entry = {"ssid": n["ssid"], "signal": signal, "security": sec or "open", "secured": bool(sec),
+                 "band": "5" if n["freq"] >= 4900 else "2.4", "in_use": False, "bssid": n["bssid"]}
+        if n["ssid"] not in best or signal > best[n["ssid"]]["signal"]:
+            best[n["ssid"]] = entry
+    return sorted(best.values(), key=lambda e: -e["signal"])
+
+
+def scan(iface, ap=False, tries=3):
+    """One root scan of iface; ap=True scans while hostapd runs (iw ... scan ap-force). -> (nets, error)."""
+    args = [_which("iw"), "dev", iface, "scan"] + (["ap-force"] if ap else [])
+    err = "no scan"
+    for i in range(tries):
+        r = _sh(*args)
+        if r.returncode == 0:
+            return parse_iw_scan(r.stdout), None
+        err = (r.stderr or r.stdout or str(r.returncode)).strip()[:160]
+        time.sleep(1.5 * (i + 1))          # -16 (busy) right after a mode change is normal
+    return [], err
+
+
+def write_scan(nets, mode, error=None, path=None):
+    _write(path or SCAN_FILE, json.dumps({"at": time.time(), "mode": mode, "error": error,
+                                          "networks": nets}), 0o644)
+
+
+def _scan_requested(last_handled):
+    """mtime of the app's request file if it is newer than the last one handled, else None."""
+    try:
+        m = os.stat(SCAN_REQUEST).st_mtime
+    except OSError:
+        return None
+    return m if m > last_handled else None
+
+
 def _write(path, text, mode):
     tmp = path + ".tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
@@ -196,6 +302,12 @@ def run():
     iface = v["iface"]
     _sh(_which("rfkill"), "unblock", "wifi")
     _sh(_which("iw"), "dev", iface, "set", "power_save", "off")
+    # scan in station mode first: once hostapd has the radio, NetworkManager cannot (C&G #209)
+    _sh("ip", "link", "set", iface, "up")
+    nets, err = scan(iface)
+    write_scan(nets, "station", err)
+    print(f"usb-router hotspot: scan before the AP: {len(nets)} networks" + (f" ({err})" if err else ""),
+          flush=True)
     _sh("ip", "addr", "flush", "dev", iface)
     print(f"usb-router hotspot: hostapd on {iface}, channel {v['channel']}, country {v['country']}, "
           f"WPA2-PSK CCMP, PMF off; dhcp {DHCP_RANGE}", flush=True)
@@ -238,8 +350,18 @@ def run():
             "oifname", "!=", iface, "masquerade")
     dnsmasq = subprocess.Popen([_which("dnsmasq"), "-k", f"--conf-file={dconf}", "--pid-file="])
     procs.append(dnsmasq)
+    handled = _scan_requested(0) or 0.0
+    last_scan = time.time()
     while all(p.poll() is None for p in procs):
         time.sleep(1)
+        asked = _scan_requested(handled)
+        if asked and time.time() - last_scan >= RESCAN_MIN_GAP:
+            handled, last_scan = asked, time.time()
+            fresh, err = scan(iface, ap=True, tries=1)
+            if fresh:                  # an empty AP-mode scan keeps the list from before the AP
+                write_scan(fresh, "ap")
+            print(f"usb-router hotspot: rescan with the AP up: {len(fresh)} networks"
+                  + (f" ({err})" if err else ""), flush=True)
     dead = next(p for p in procs if p.poll() is not None)
     print(f"usb-router hotspot: {'hostapd' if dead is hostapd else 'dnsmasq'} exited ({dead.returncode})",
           flush=True)

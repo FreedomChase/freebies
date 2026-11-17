@@ -703,3 +703,15 @@ def test_diag_parses_iw_and_journal(monkeypatch, tmp_path):
     assert (d["channel"], d["freq"], d["country"], d["stations"]) == (6, 2437, "ES", 1)
     assert (d["security"], d["pmf"]) == ("wpa-psk", "off")
     assert d["last_event"] == "04:12:33 wlan0: AP-STA-POSSIBLE-PSK-MISMATCH 66:55:44:33:22:11"
+
+
+def test_shut_down_needs_the_pin_and_tells_every_screen(client):
+    """C&G #209: Shut down beside Reboot, same PIN gate; status says so, for the safe-to-unplug screen."""
+    phone = {"REMOTE_ADDR": "10.42.0.29"}
+    assert client.post("/api/system", json={"action": "shutdown"}, environ_base=phone, no_pin=True).status_code == 401
+    assert client.get("/api/status").get_json()["power"] is None
+    assert client.post("/api/system", json={"action": "shutdown"}, environ_base=phone).status_code == 200
+    assert client.get("/api/status").get_json()["power"] == "shutdown"
+    page = client.get("/").get_data(as_text=True)
+    assert page.count('data-action="reboot"') == 1 and page.count('data-action="shutdown"') == 1
+    assert "Safe to unplug when the green light stops blinking." in page

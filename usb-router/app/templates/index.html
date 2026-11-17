@@ -23,6 +23,12 @@
 
 <main>
   <!-- Phone side: the PIN comes before anything else (S&D #193) -->
+  <section id="power-off" class="power-off hidden" role="alert" aria-live="assertive">
+    <div class="op-lockup" role="img" aria-label="ORIONPATH"></div>
+    <h2>Shutting down</h2>
+    <p>Safe to unplug when the green light stops blinking.</p>
+  </section>
+
   <section id="pin-gate" class="card pin-gate hidden" aria-labelledby="pin-gate-title">
     <div class="op-lockup" role="img" aria-label="ORIONPATH"></div>
     <h2 id="pin-gate-title">Enter the admin PIN</h2>
@@ -199,6 +205,7 @@
         <button class="btn" data-action="reload">Reload content</button>
         <button class="btn" data-action="restart-browser">Restart browser</button>
         <button class="btn btn-danger" data-action="reboot">Reboot screen</button>
+        <button class="btn btn-danger" data-action="shutdown">Shut down</button>
       </div>
       <p class="hint">Tip: these can also be set in <code>usb-router.conf</code> on the stick's <code>USBROUTER</code> drive, or remotely from the fleet dashboard.</p>
     </section>

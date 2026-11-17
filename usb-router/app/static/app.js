@@ -74,9 +74,11 @@
     try {
       state.status = await api(`/api/status${force ? "?force=1" : ""}`);
       renderStatus(state.status);
+      if (state.status.power === "shutdown") showPowerOff();
     } catch (e) {
       console.error("status refresh failed", e);
-      $("status-text").textContent = "Connection manager unreachable";
+      // C&G #209: say what failed, so a photo of the screen names it
+      $("status-text").textContent = `Status check failed: ${(e && e.message) || e}`.slice(0, 120);
     }
   };
 
@@ -210,12 +212,18 @@
   };
 
   /* ---------------- system actions ---------------- */
+  // C&G #209: after Shut down, phone and screen both say when it is safe to unplug
+  const showPowerOff = () => { $("power-off").classList.remove("hidden"); document.body.classList.add("powering-off"); };
   document.querySelectorAll("[data-action]").forEach((b) => {
     b.onclick = async () => {
       const a = b.dataset.action;
       if (a === "reboot" && !confirm("Reboot this screen now?")) return;
+      if (a === "shutdown" && !confirm("Shut this screen down now? It stays off until the power is unplugged and plugged back in.")) return;
       busy(b, true);
-      try { await api("/api/system", { method: "POST", body: { action: a } }); toast(a === "reboot" ? "Rebooting…" : "Done", "ok"); }
+      try {
+        await api("/api/system", { method: "POST", body: { action: a } });
+        if (a === "shutdown") showPowerOff(); else toast(a === "reboot" ? "Rebooting…" : "Done", "ok");
+      }
       catch (e) { toast(e.message, "bad"); }
       busy(b, false);
     };

@@ -113,6 +113,9 @@ class Router:
 
     def tick(self, online):
         """One keeper step. Returns the action taken (for tests/logging)."""
+        busy = getattr(self.nm, "busy", None)
+        if busy and busy():
+            return "busy"         # a venue join holds the radio (C&G #209)
         want = self.desired(online)
         active = self.nm.hotspot_status()["active"]
         if active and self.role is None:

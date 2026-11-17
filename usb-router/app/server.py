@@ -117,9 +117,14 @@ def system_action(action):
     if action in ("reboot", "shutdown"):
         if MOCK:
             log.info("mock: would %s", action)
+            with _state_lock:
+                _state["power"] = action
             return
         cmd = ["systemctl", "reboot" if action == "reboot" else "poweroff"]
-        threading.Timer(1.0, lambda: subprocess.run(cmd, check=False)).start()
+        with _state_lock:
+            _state["power"] = action
+        # shutdown waits past one screen poll (5 s), so the Pi's own screen shows "safe to unplug" (C&G #209)
+        threading.Timer(6.0 if action == "shutdown" else 1.0, lambda: subprocess.run(cmd, check=False)).start()
         return
     raise ValueError(f"unknown action {action!r}")
 
@@ -250,6 +255,7 @@ def api_status():
         "device": {"id": cfg.device_id(), "name": cfg.get("device_name"), "provisioned": _state["provisioned"]},
         "fleet": fleet.info(),
         "current_url": _state["current_url"],
+        "power": _state.get("power"),
         "backend": nm.name,
     })
 

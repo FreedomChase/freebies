@@ -208,3 +208,18 @@ body.phone-setup .grid { grid-template-columns: 1fr; }
 body.phone-setup .setup-phone { display: block; background: none; border: 0; padding: 0 4px; margin-bottom: 20px; }
 body.phone-setup .setup-phone .op-lockup { display: block; width: 112px; margin-bottom: 1.75rem; }
 body.phone-setup .setup-phone strong { font-size: 1.5rem; letter-spacing: -0.04em; font-weight: 600; display: block; }
+
+/* C&G #209: Shut down. The power row is the one part of the settings card a phone sees after the PIN. */
+body.phone-setup .grid > #settings-card { display: block !important; }
+body.phone-setup #settings-card > :not(.actions) { display: none !important; }
+body.phone-setup #settings-card .actions { margin-top: 0; padding-top: 0; border-top: 0; }
+body.phone-setup #settings-card .actions [data-action="reload"],
+body.phone-setup #settings-card .actions [data-action="restart-browser"] { display: none; }
+.power-off { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 18px; padding: 24px; text-align: center; background: var(--bg); color: var(--paper); }
+.power-off.hidden { display: none; }
+.power-off .op-lockup { width: clamp(140px, 22vw, 260px); }
+.power-off h2 { margin: 0; font-size: clamp(1.8rem, 4vw, 3rem); letter-spacing: -0.04em; }
+.power-off p { margin: 0; max-width: 32ch; font-size: clamp(1.1rem, 2.2vw, 1.6rem); color: var(--muted); }
+body.powering-off main > :not(#power-off), body.powering-off .top, body.powering-off .foot { display: none !important; }
+body.powering-off main > #power-off:not(.hidden) { display: flex !important; }
