@@ -11,11 +11,14 @@
   --radius: 10px; font-size: 17px;
   /* the Display Player ground (Shaun, 17 Nov 09:53 CET: "more dramatic gradient"): boot splash and
      QR screen share it, in proportions only, so Plymouth -> page -> QR never jumps (C&G #209 v8.4) */
+  /* v8.4b (frontend 10:04 CET): stronger than bc64ebb; brighter corners, a darker centre behind the
+     white splash text and bar */
   --ground-dramatic:
-    radial-gradient(ellipse 70% 62% at 12% -4%, rgba(74,150,232,.62), transparent 70%),
-    radial-gradient(ellipse 58% 52% at 100% 104%, rgba(242,167,184,.34), transparent 72%),
-    radial-gradient(ellipse 46% 40% at 64% 46%, rgba(108,92,196,.16), transparent 75%),
-    linear-gradient(150deg, #0F4C8A 0%, #052444 46%, #020E1D 100%);
+    radial-gradient(ellipse 42% 36% at 50% 52%, rgba(1,9,20,.50), transparent 78%),
+    radial-gradient(ellipse 76% 68% at 10% -6%, rgba(84,162,244,.82), transparent 70%),
+    radial-gradient(ellipse 60% 54% at 100% 106%, rgba(242,167,184,.50), transparent 72%),
+    radial-gradient(ellipse 40% 36% at 90% 14%, rgba(118,96,210,.24), transparent 75%),
+    linear-gradient(150deg, #1462AC 0%, #04203D 46%, #010913 100%);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; color: var(--text); letter-spacing: -0.01em;
@@ -172,7 +175,7 @@ body.pin-locked main > :not(#pin-gate) { display: none !important; }
 body.setup-mode .top, body.setup-mode .foot, body.setup-mode main > :not(#setup-card) { display: none !important; }
 body.setup-mode main { display: flex; align-items: center; padding: 5vh 6vw; max-width: none; }
 body.setup-mode .setup-qr { min-height: 0; width: 100%; max-width: 1500px; margin: 0 auto;
-  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; column-gap: 6vw; row-gap: 3vh;
+  display: grid; grid-template-columns: auto auto; justify-content: center; grid-template-rows: auto 1fr; column-gap: 6vw; row-gap: 3vh;
   align-items: center; background: none; border: 0; box-shadow: none; padding: 0; }
 body.setup-mode .setup-qr .dp-brand { grid-column: 1 / -1; font-size: clamp(1.4rem, 2.4vw, 2.6rem); }
 body.setup-mode, body.phone-setup, body.pin-locked { background: var(--ground-dramatic); background-attachment: fixed; }
@@ -189,6 +192,9 @@ body.setup-mode .qr-small, body.setup-mode .setup-text .hint:not(.diag) { displa
   width: 1.6em; height: 1.6em; border-radius: 50%; display: grid; place-items: center; font-size: 0.85em;
   box-shadow: inset 0 1px 0 var(--pink-hi), 0 8px 16px -8px rgba(0,0,0,.7); }
 .steps .muted { font-size: 0.8em; }
+/* v8.4b (frontend 10:00 CET): QR+steps centred as one block; the Wi-Fi name line bigger (about 26 px at
+   1920) and lighter, the step text colour at 75 %, to read from across a room */
+body.setup-mode .steps .muted { font-size: 0.95em; color: rgba(245,242,236,.75); }
 body.setup-mode .pin-big { display: block; margin-top: 0.4em; font-size: 1.6em; font-weight: 600; letter-spacing: 0.14em;
   font-variant-numeric: tabular-nums; color: var(--pink-hi); }
 /* Wi-Fi check line: only after a phone was refused, or with the D key (S&D #193 v8) */
@@ -235,8 +241,10 @@ body.powering-off main > #power-off:not(.hidden) { display: flex !important; }
    matches it at any 16:9 resolution and the handoff from Plymouth to cog does not jump. */
 .boot-splash { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
   background: var(--ground-dramatic); transition: opacity .9s ease; }
-/* C&G #209 v8.4 (Shaun 09:53 CET): no logo, no ORIONPATH; "Setting up, please wait..." and a progress bar */
+/* C&G #209 v8.4 (Shaun 09:53 CET): no ORIONPATH; "Setting up, please wait..." and a progress bar */
 .boot-box { display: flex; flex-direction: column; align-items: center; gap: 3.4vh; }
+/* v8.4b (Shaun 10:00 CET: the icon back, no ORIONPATH word; frontend 10:04: about 11vh tall, about 4vh to the text) */
+.boot-splash .boot-mark { width: auto; height: 11vh; margin-bottom: 0.6vh; }
 .boot-text { margin: 0; font-size: 2.1vw; font-weight: 500; letter-spacing: -0.03em; color: var(--paper); }
 .boot-bar { width: 26vw; height: 0.7vh; min-height: 5px; border-radius: 99px; overflow: hidden;
   background: rgba(245,242,236,.16); }

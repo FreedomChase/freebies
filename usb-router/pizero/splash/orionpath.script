@@ -1,11 +1,12 @@
-# Display Player boot splash (C&G #209 v8.4, Shaun 17 Nov 09:53 CET: no logo, no ORIONPATH; a
-# progress bar and "Setting up, please wait..."). bg.png, text.png, track.png and fill.png are
+# Display Player boot splash (C&G #209 v8.4, Shaun 17 Nov 09:53 CET: no ORIONPATH; a progress bar
+# and "Setting up, please wait..."; 10:00 CET: the icon back, above the text). bg.png, icon.png,
+# text.png, track.png and fill.png are
 # rendered from the setup page's .boot-splash (splash/render.py) at 1920x1080 and drawn here in
-# the page's own proportions (text 2.1vw, gap 3.4vh, bar 26vw x 0.7vh, centred as one column),
+# the page's own proportions (icon 11vh + 4vh, text 2.1vw, gap 3.4vh, bar 26vw x 0.7vh, centred as one column),
 # so the handoff to the page's splash does not jump. Plymouth fills the bar to 60 % with the
 # boot's progress; the page carries on from 60 %.
-Window.SetBackgroundTopColor(0.059, 0.298, 0.541);
-Window.SetBackgroundBottomColor(0.008, 0.055, 0.114);
+Window.SetBackgroundTopColor(0.078, 0.384, 0.675);
+Window.SetBackgroundBottomColor(0.004, 0.035, 0.075);
 W = Window.GetWidth();
 H = Window.GetHeight();
 X = Window.GetX();
@@ -20,11 +21,18 @@ bw = Math.Int(W * 0.26);
 bh = Math.Int(H * 0.007);
 if (bh < 5) bh = 5;
 gap = Math.Int(H * 0.034);
-top = Y + Math.Int((H - (th + gap + bh)) / 2);
+ii = Image("icon.png");
+iw = Math.Int(ii.GetWidth() * k);
+ih = Math.Int(ii.GetHeight() * k);
+igap = Math.Int(H * 0.040);
+top = Y + Math.Int((H - (ih + igap + th + gap + bh)) / 2);
+icon = Sprite(ii.Scale(iw, ih));
+icon.SetPosition(X + Math.Int((W - iw) / 2), top, 10);
+ty = top + ih + igap;
 text = Sprite(ti.Scale(tw, th));
-text.SetPosition(X + Math.Int((W - tw) / 2), top, 10);
+text.SetPosition(X + Math.Int((W - tw) / 2), ty, 10);
 bx = X + Math.Int((W - bw) / 2);
-by = top + th + gap;
+by = ty + th + gap;
 track = Sprite(Image("track.png").Scale(bw, bh));
 track.SetPosition(bx, by, 10);
 fill_src = Image("fill.png");

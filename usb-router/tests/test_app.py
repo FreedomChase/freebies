@@ -48,6 +48,19 @@ def test_index_renders(client):
     assert b"ORIONPATH" not in r.data          # Shaun 17 Nov 09:56 CET: the icon only, no word (C&G #209 v8.4)
 
 
+def test_splash_has_icon_page_and_plymouth():
+    """Shaun 17 Nov 10:00 CET: the splash is the icon + 'Setting up, please wait...' + bar, on the page and in Plymouth."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    html = (root / "app/templates/index.html").read_text()
+    box = html[html.index('class="boot-box"'):html.index("</div></div>", html.index('class="boot-box"'))]
+    assert box.index("boot-mark") < box.index("boot-text") < box.index("boot-bar")
+    script = (root / "pizero/splash/orionpath.script").read_text()
+    assert 'Image("icon.png")' in script
+    assert (root / "pizero/splash/icon.png").stat().st_size > 1000
+    assert "icon.png" in (root / "pizero/quiet-boot.sh").read_text()
+
+
 def test_status_offline_initially(client):
     r = client.get("/api/status").get_json()
     assert r["ok"] and r["online"] is False
