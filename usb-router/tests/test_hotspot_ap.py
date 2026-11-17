@@ -153,9 +153,12 @@ def test_helper_scan_retries_then_reports_the_error(monkeypatch):
     assert nets == [] and "busy" in err and len(calls) == 2 and calls[0][-1] == "ap-force"
 
 
-def _fake_nm(tmp_path, monkeypatch, unit_active, nm_nets, connect_ok=True, journal=""):
-    """HostapdNetworkManager against fake systemctl/nmcli. Returns (nm, calls, state)."""
-    state = {"active": unit_active, "managed": not unit_active, "saved": [], "connected": None}
+def _fake_nm(tmp_path, monkeypatch, unit_active, nm_nets, connect_ok=True, journal="", stuck=0, late=0):
+    """HostapdNetworkManager against fake systemctl/nmcli. Returns (nm, calls, state).
+    stuck: device-status polls that still say 'unavailable' after managed yes (v8.4);
+    late: 'connection up' calls that fail with 'device is not available' first."""
+    state = {"active": unit_active, "managed": not unit_active, "saved": [], "connected": None,
+             "stuck": stuck, "late": late}
     calls = []
 
     def fake_run(args, timeout=0, check=True):
@@ -177,6 +180,9 @@ def _fake_nm(tmp_path, monkeypatch, unit_active, nm_nets, connect_ok=True, journ
             return ""
         if a[-2:] == ("device", "status"):
             st = "disconnected" if state["managed"] else "unmanaged"
+            if state["managed"] and state["stuck"] > 0:
+                state["stuck"] -= 1
+                st = "unavailable"
             if state["connected"]:
                 st = "connected"
             return f"wlan0:wifi:{st}:{state['connected'] or ''}\n"
@@ -197,6 +203,10 @@ def _fake_nm(tmp_path, monkeypatch, unit_active, nm_nets, connect_ok=True, journ
             state.setdefault("profiles", []).append(a)
             return ""
         if "up" in a and "connection" in a:
+            if state["late"] > 0:
+                state["late"] -= 1
+                raise netman.NetError(f"Error: Connection activation failed: Connection '{a[a.index('up') + 1]}' "
+                                      "is not available on device wlan0 because device is not available.")
             if not connect_ok:
                 raise netman.NetError("Error: Connection activation failed: (1) Unknown error.")
             state["connected"] = a[a.index("up") + 1]
@@ -372,3 +382,41 @@ def test_nm_reason_reads_the_last_real_reason_for_that_radio(monkeypatch):
     assert netman.nm_reason("wlan0", 100)["words"] == "NetworkManager said: sim-pin-incorrect"
     monkeypatch.setattr(netman, "_run", lambda args, timeout=0, check=True: "")
     assert netman.nm_reason("wlan0", 100) is None
+
+
+def test_radio_that_never_comes_back_fails_with_a_trail_and_the_hotspot_returns(tmp_path, monkeypatch):
+    """v8.4: Shaun at the office, 'Edwards_cowork is not available on device wlan0'."""
+    nm, calls, state = _fake_nm(tmp_path, monkeypatch, True, ["Edwards_cowork"], stuck=10**6)
+    with pytest.raises(netman.NetError) as e:
+        nm.wifi_connect("Edwards_cowork", "venuepass1")
+    j = nm.join_state()
+    assert j["ok"] is False and "did not come back" in j["reason"] == str(e.value)
+    assert any(t.startswith("unavailable/") for t in j["trail"]) and any("managed yes again" in t for t in j["trail"])
+    assert calls.count(["nmcli", "device", "set", "wlan0", "managed", "yes"]) >= 2       # + the hotspot path
+    assert not any(c[:3] == ["nmcli", "connection", "add"] for c in calls)   # no join on a dead radio
+    assert state["active"] and not nm.busy()
+
+
+def test_radio_slow_to_come_back_is_waited_for_then_joins(tmp_path, monkeypatch):
+    nm, calls, state = _fake_nm(tmp_path, monkeypatch, True, ["Edwards_cowork"], stuck=60)   # 30 s
+    nm.wifi_connect("Edwards_cowork", "venuepass1")
+    assert state["connected"] == "Edwards_cowork" and nm.join_state()["ok"] is True
+    assert nm.join_state()["trail"][0].startswith("unavailable/")
+
+
+def test_device_not_available_at_the_join_gets_one_more_try(tmp_path, monkeypatch):
+    nm, calls, state = _fake_nm(tmp_path, monkeypatch, True, ["Edwards_cowork"], late=1)
+    nm.wifi_connect("Edwards_cowork", "venuepass1")
+    ups = [c for c in calls if c[:2] == ["nmcli", "--wait"]]
+    assert len(ups) == 2 and state["connected"] == "Edwards_cowork"
+
+
+def test_helper_hands_the_radio_back_in_station_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr(hotspot_ap, "_sh", lambda *a, **k: calls.append(list(a)))
+    monkeypatch.setattr(hotspot_ap, "_which", lambda n: n)
+    hotspot_ap._down("wlan0", False)
+    i_down = calls.index(["ip", "link", "set", "wlan0", "down"])
+    i_type = calls.index(["iw", "dev", "wlan0", "set", "type", "managed"])
+    i_up = calls.index(["ip", "link", "set", "wlan0", "up"])
+    assert i_down < i_type < i_up

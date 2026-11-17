@@ -276,6 +276,11 @@ def _which(name):
 def _down(iface, share):
     if iface:
         _sh("ip", "addr", "flush", "dev", iface)
+        # C&G #209 v8.4: hand the radio back in station mode. brcmfmac can stay in AP mode after
+        # hostapd exits, and NetworkManager then calls wlan0 "not available" for a venue join.
+        _sh("ip", "link", "set", iface, "down")
+        _sh(_which("iw"), "dev", iface, "set", "type", "managed")
+        _sh("ip", "link", "set", iface, "up")
     if share:
         _sh(_which("nft"), "delete", "table", "ip", NFT_TABLE)
 

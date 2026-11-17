@@ -265,7 +265,7 @@ def _join_for(j):
     """The last venue join for the screen (C&G #209 v8.3); dropped after 10 minutes."""
     if not j or time.time() - (j.get("at") or 0) > 600:
         return None
-    return {k: j.get(k) for k in ("ssid", "step", "ok", "reason", "nm_reason", "at")}
+    return {k: j.get(k) for k in ("ssid", "step", "ok", "reason", "nm_reason", "trail", "at")}
 
 
 @app.get("/api/check")

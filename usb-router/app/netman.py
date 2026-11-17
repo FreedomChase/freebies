@@ -367,6 +367,8 @@ def _plain_error(text):
         return NM_REASONS["no-secrets"]
     if "No network with SSID" in text:
         return NM_REASONS["ssid-not-found"]
+    if "not available" in text:
+        return "the Wi-Fi chip did not come back from the setup hotspot in time"
     return text.replace("Error: ", "").strip()[:160] or "the join failed"
 
 
@@ -617,7 +619,7 @@ class HostapdNetworkManager(NetworkManager):
     LEASES = "/run/usb-router-ap/leases"
 
     SCAN_FILE = "/run/usb-router-ap/scan.json"
-    HANDBACK_WAIT = 20                # s for NetworkManager to take wlan0 back and see networks
+    HANDBACK_WAIT = 45                # s for NetworkManager to take wlan0 back (v8.4: was 20)
     JOIN_BUSY = 150                   # s the keeper leaves the radio alone during a venue join
 
     def __init__(self, state_dir=None, scan_file=None):
@@ -680,24 +682,70 @@ class HostapdNetworkManager(NetworkManager):
         nets = sorted(nets or [], key=lambda n: -int(n.get("signal") or 0))
         return nets
 
+    def _radio(self, iface):
+        """NetworkManager's state of iface and the chip's own mode (iw: managed / AP), for the trail."""
+        try:
+            st = {d["iface"]: d["state"] for d in NetworkManager.devices(self)}.get(iface)
+        except NetError:
+            st = None
+        try:
+            out = _run(["iw", "dev", iface, "info"], timeout=10, check=False) or ""
+        except NetError:
+            out = ""
+        m = re.search(r"^\s*type\s+(\S+)", out, re.M)
+        return st, (m.group(1) if m else None)
+
     def _handback(self, iface, ssid):
-        """Stop hostapd, give iface back to NetworkManager, wait until it can see ssid."""
+        """
+        Stop hostapd, give iface back to NetworkManager, wait until it is usable and sees ssid.
+        v8.4 (C&G #209, Edwards_cowork): every step is checked, the wait is HANDBACK_WAIT (45 s)
+        counted in sleeps, a stalled radio gets 'managed yes' once more, and each change of state
+        lands in the join trail so the screen can show where it stuck.
+        Returns (seen, ready).
+        """
+        trail = []
+        t0 = time.time()
+
+        def note(what):
+            trail.append(f"{what}@{time.time() - t0:.0f}s")
+            self._join_step((self._join or {}).get("step") or "handing the radio back", trail=list(trail))
+
         _run(["systemctl", "stop", self.UNIT], timeout=30, check=False)
-        nmcli("device", "set", iface, "managed", "yes", check=False)
-        deadline = time.time() + self.HANDBACK_WAIT
-        while time.time() < deadline:
-            states = {d["iface"]: d["state"] for d in NetworkManager.devices(self)}
-            if states.get(iface) not in (None, "unmanaged", "unavailable"):
+        for _ in range(20):                       # the unit stops within TimeoutStopSec=10
+            if not self._unit_active():
                 break
             self.sleep(0.5)
-        while time.time() < deadline:
+        else:
+            note("hotspot unit still running")
+        try:
+            nmcli("device", "set", iface, "managed", "yes")
+        except NetError as e:
+            note(f"managed yes refused: {str(e)[:80]}")
+        last, ready, nudged = None, False, False
+        steps = int(self.HANDBACK_WAIT / 0.5)
+        for i in range(steps):
+            st, typ = self._radio(iface)
+            if (st, typ) != last:
+                note(f"{st or '?'}/{typ or '?'}")
+                last = (st, typ)
+            if st not in (None, "unmanaged", "unavailable"):
+                ready = True
+                break
+            if not nudged and i >= steps // 3:    # stuck for 15 s: ask once more
+                nudged = True
+                nmcli("device", "set", iface, "managed", "yes", check=False)
+                note("managed yes again")
+            self.sleep(0.5)
+        if not ready:
+            return False, False
+        for _ in range(15):
             try:
                 if any(n["ssid"] == ssid for n in NetworkManager.wifi_scan(self, rescan=True)):
-                    return True
+                    return True, True
             except NetError:
                 pass
             self.sleep(1)
-        return False
+        return False, True
 
     def join_state(self):
         """The last venue join from the hotspot, for the screen (C&G #209 v8.3): which name was
@@ -745,10 +793,19 @@ class HostapdNetworkManager(NetworkManager):
         try:
             saved_before = {c["name"] for c in self.saved_connections()}
             self._join_step("handing the radio back")
-            seen = self._handback(ap_iface, ssid)
-            self._join_step("joining" if seen else "joining (not seen in the scan yet)", seen=seen)
+            seen, ready = self._handback(ap_iface, ssid)
+            self._join_step("joining" if seen else "joining (not seen in the scan yet)", seen=seen, ready=ready)
             try:
-                self._join_profile(ssid, password, ap_iface)
+                if not ready:
+                    raise NetError("Error: device is not available")
+                try:
+                    self._join_profile(ssid, password, ap_iface)
+                except NetError as e:
+                    if "not available" not in str(e):
+                        raise
+                    self.sleep(5)                 # the radio came back a moment late: once more
+                    self._join_step("joining, second try")
+                    nmcli("--wait", "45", "connection", "up", ssid, "ifname", ap_iface, timeout=60)
             except NetError as e:
                 reason = nm_reason(ap_iface, started) or {}
                 words = reason.get("words") or _plain_error(str(e))

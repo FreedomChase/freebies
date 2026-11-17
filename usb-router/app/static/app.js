@@ -188,7 +188,8 @@
   /* ---------------- venue join on the screen (C&G #209 v8.3) ----------------
      The phone drops off when the hotspot stops, so the screen is where the join is seen:
      the step and the exact name while it runs, and NetworkManager's reason when it fails. */
-  const fmtJoin = (j) => !j ? "" : `join: "${j.ssid}" ${j.step}${j.nm_reason ? ` (${j.nm_reason})` : ""}`;
+  const fmtJoin = (j) => !j ? "" : `join: "${j.ssid}" ${j.step}${j.nm_reason ? ` (${j.nm_reason})` : ""}`
+    + (j.trail && j.trail.length ? ` · radio: ${j.trail.join(" → ")}` : "");
   const renderJoin = (s, setupShowing) => {
     const j = s.join, banner = $("join-banner"), line = $("setup-join");
     const running = j && j.ok === null, failed = j && j.ok === false;
@@ -197,9 +198,11 @@
     banner.classList.toggle("bad", !!failed);
     if (j) banner.innerHTML = running ? `Joining <strong>${esc(j.ssid)}</strong>: ${esc(j.step)}…`
       : failed ? `<strong>${esc(j.ssid)}</strong> did not join: ${esc(j.reason || "unknown reason")}.`
+        + (j.trail && j.trail.length ? `<br><small class="muted">radio: ${esc(j.trail.join(" → "))}</small>` : "")
       : `Joined <strong>${esc(j.ssid)}</strong>.`;
     line.classList.toggle("hidden", !(s.local && failed));
-    if (failed) line.innerHTML = `Last try: <strong>${esc(j.ssid)}</strong> did not join: ${esc(j.reason || "unknown reason")}. Scan the code to try again.`;
+    if (failed) line.innerHTML = `Last try: <strong>${esc(j.ssid)}</strong> did not join: ${esc(j.reason || "unknown reason")}. Scan the code to try again.`
+      + (j.trail && j.trail.length ? `<br><small>radio: ${esc(j.trail.join(" → "))}</small>` : "");
   };
   /* ---------------- boot splash (C&G #209 v8.2) ----------------
      On the screen only. It stays until there is something to show: the QR setup screen; the
