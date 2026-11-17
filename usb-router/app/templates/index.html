@@ -10,7 +10,7 @@
 
 <header class="top">
   <div class="brand">
-    <span class="logo" aria-hidden="true"></span>
+    <span class="op-mark" aria-hidden="true"></span>
     <div>
       <h1>USB Router <span id="device-label" class="device-label"></span></h1>
       <p class="sub">Connect this screen to the internet, then it shows your content.</p>
@@ -24,6 +24,7 @@
 <main>
   <!-- Phone side: the PIN comes before anything else (S&D #193) -->
   <section id="pin-gate" class="card pin-gate hidden" aria-labelledby="pin-gate-title">
+    <div class="op-lockup" role="img" aria-label="ORIONPATH"></div>
     <h2 id="pin-gate-title">Enter the admin PIN</h2>
     <p class="muted">This screen is locked. Type the admin PIN to set it up.</p>
     <form id="pin-gate-form" autocomplete="off">
@@ -36,16 +37,16 @@
 
   <!-- Phone-based setup (no keyboard on the screen): QR first (S&D #193) -->
   <section id="setup-card" class="card setup setup-qr hidden">
+    <div class="op-lockup" role="img" aria-label="ORIONPATH"></div>
     <figure class="qr-big">
       <img id="qr-wifi" alt="QR code to join the setup Wi-Fi" width="360" height="360">
-      <figcaption>Scan with your phone camera to join</figcaption>
     </figure>
     <div class="setup-text">
-      <h2>Set this screen up from your phone</h2>
-      <ol>
+      <h2>Set up this screen from your phone</h2>
+      <ol class="steps">
         <li>Scan the code with the camera and tap <strong>Join</strong>.<br>
           <span class="muted">The Wi-Fi is called <strong id="setup-ssid"></strong>.</span></li>
-        <li>The phone opens the setup page by itself and asks for the admin PIN<span id="setup-pin-wrap" class="hidden">: <strong id="setup-pin" class="pin-big"></strong></span>.</li>
+        <li>The phone opens the setup page by itself and asks for the admin PIN.<span id="setup-pin-wrap" class="hidden"> <strong id="setup-pin" class="pin-big"></strong></span></li>
         <li>Pick the venue's Wi-Fi.</li>
       </ol>
       <figure class="qr-small">
@@ -59,6 +60,7 @@
 
   <!-- Phone side of the setup hotspot (the captive page lands here) -->
   <section id="setup-phone" class="banner setup-phone hidden">
+    <div class="op-lockup" role="img" aria-label="ORIONPATH"></div>
     <div>
       <strong>You are connected to the screen.</strong>
       <p>Pick the venue's Wi-Fi below and type its password.</p>

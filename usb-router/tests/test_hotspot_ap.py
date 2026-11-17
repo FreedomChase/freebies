@@ -75,3 +75,21 @@ def test_auto_backend_is_networkmanager_without_hostapd(monkeypatch):
     monkeypatch.setattr(netman, "hostapd_ready", lambda: True)
     assert type(netman.get_backend(False, "auto")) is netman.HostapdNetworkManager
     assert type(netman.get_backend(False, "networkmanager")) is netman.NetworkManager
+
+
+def test_diag_flags_a_refused_phone_but_not_the_tx_power_noise(monkeypatch):
+    def fake_run(args, timeout=0, check=True):
+        if args[0] == "journalctl":
+            return ("Nov 17 11:44:30 pi kernel: ieee80211 phy0: brcmf_cfg80211_get_tx_power: error (-512)\n"
+                    "Nov 17 11:44:31 pi usb-router-hotspot[9]: wlan0: STA 66:55:44:33:22:11 IEEE 802.11: authenticated\n")
+        return ""
+    monkeypatch.setattr(netman, "_run", fake_run)
+    d = netman.hotspot_diag("wlan0", None)
+    assert d["refused"] is False and "authenticated" in d["last_event"]
+
+    def fake_run2(args, timeout=0, check=True):
+        if args[0] == "journalctl":
+            return "Nov 17 11:44:32 pi usb-router-hotspot[9]: wlan0: AP-STA-POSSIBLE-PSK-MISMATCH 66:55:44:33:22:11\n"
+        return ""
+    monkeypatch.setattr(netman, "_run", fake_run2)
+    assert netman.hotspot_diag("wlan0", None)["refused"] is True

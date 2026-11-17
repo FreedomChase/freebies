@@ -316,6 +316,12 @@ class NetworkManager:
 BRCMFMAC_CONF = "/etc/modprobe.d/usb-router-brcmfmac.conf"
 
 
+REFUSAL = re.compile(r"PSK-MISMATCH|WRONG_KEY|pre-shared key may be incorrect|deauthenticated due to|"
+                     r"disassociated due to|AP-STA-POSSIBLE-PSK-MISMATCH|EAPOL-Key timeout|"
+                     r"auth.*(fail|timeout|reject)|assoc.*(fail|reject)|Failed to|hostapd exited|"
+                     r"dnsmasq exited|did not start", re.I)
+
+
 def clock_source():
     """'internet' when systemd says the clock is synced, else 'not set' (the Pi has no RTC)."""
     try:
@@ -344,7 +350,7 @@ def hotspot_diag(iface, con_name):
     """
     d = {"iface": iface, "ap": "NetworkManager", "channel": None, "freq": None, "country": None,
          "security": None, "pmf": None, "fw_offload": None, "stations": None, "last_event": None,
-         "clock": clock_source()}
+         "clock": clock_source(), "refused": False}
     iw = _tool("iw")
     try:
         m = re.search(r"channel (\d+) \((\d+) MHz\)", _run([iw, "dev", iface, "info"], timeout=5, check=False))
@@ -388,6 +394,8 @@ def hotspot_diag(iface, con_name):
         if hits:
             parts = hits[-1].split(None, 5)    # Mon DD HH:MM:SS host ident: message
             d["last_event"] = (parts[2] + " " + parts[5])[:160] if len(parts) == 6 else hits[-1][:160]
+        # a phone tried and was turned away, or the access point itself failed: the screen shows the line
+        d["refused"] = any(REFUSAL.search(l) for l in hits)
     except NetError:
         pass
     return d
@@ -482,8 +490,10 @@ class MockNetworkManager:
         self.hotspot = {"iface": iface, "ssid": ssid, "mode": "wifi"}
 
     def hotspot_diag(self, iface):
-        return {"iface": iface, "channel": 6, "freq": 2437, "country": "ES", "security": "wpa-psk", "pmf": "off",
-                "fw_offload": "off", "stations": 0, "last_event": "04:12:33 wlan0: AP-STA-POSSIBLE-PSK-MISMATCH 66:55:44:33:22:11"}
+        refused = os.environ.get("USB_ROUTER_MOCK_REFUSED", "0") == "1"
+        return {"iface": iface, "ap": "hostapd", "channel": 6, "freq": 2437, "country": "ES", "security": "wpa-psk",
+                "pmf": "off", "fw_offload": "off", "stations": 0, "clock": "not set", "refused": refused,
+                "last_event": "04:12:33 wlan0: AP-STA-POSSIBLE-PSK-MISMATCH 66:55:44:33:22:11" if refused else None}
 
     def hotspot_stop(self):
         self.hotspot = None

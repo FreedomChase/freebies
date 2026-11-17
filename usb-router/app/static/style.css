@@ -1,19 +1,28 @@
+/* ORIONPATH, dark (Shaun, 17 Nov 06:05 CET, S&D #193): navy ground with the brand's cinematic
+   light, paper ink, light pink accent, Instrument Sans with tight tracking. Vendored, no CDN. */
+@font-face { font-family: "Instrument Sans"; src: url("brand/instrument-sans-latin.woff2") format("woff2");
+  font-weight: 400 700; font-style: normal; font-display: swap; }
 :root {
-  --bg: #0e1116; --panel: #171b23; --panel-2: #1e2430; --line: #2a3140;
-  --text: #e8ecf2; --muted: #93a0b4; --accent: #4f8cff; --accent-2: #3b74e0;
-  --ok: #2fbf71; --warn: #f2b134; --bad: #f25f5c;
-  --radius: 14px; font-size: 17px;
-}
-@media (prefers-color-scheme: light) {
-  :root { --bg: #f3f5f8; --panel: #ffffff; --panel-2: #f0f3f8; --line: #dde3ec; --text: #10161f; --muted: #5a677a; }
+  --navy: #052444; --navy-deep: #031C36; --paper: #F5F2EC; --pink: #F2A7B8; --pink-hi: #FFC6D2;
+  --bg: var(--navy-deep); --panel: rgba(245,242,236,.055); --panel-2: rgba(245,242,236,.085);
+  --line: rgba(245,242,236,.14); --text: var(--paper); --muted: #A9B7C7;
+  --accent: var(--pink); --accent-2: var(--pink-hi);
+  --ok: #8AD6AE; --warn: #F2C46B; --bad: #F59A9A;
+  --radius: 10px; font-size: 17px;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--bg); color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "DejaVu Sans", sans-serif; }
+html, body { margin: 0; color: var(--text); letter-spacing: -0.01em;
+  font-family: "Instrument Sans", "DejaVu Sans", system-ui, sans-serif; }
+html { background: var(--navy-deep); }
+body { background:
+    radial-gradient(ellipse 46rem 26rem at 8% -6rem, rgba(40,96,160,.45), transparent),
+    radial-gradient(ellipse 40rem 22rem at 96% 110%, rgba(242,167,184,.10), transparent),
+    linear-gradient(135deg, #0C3866 0%, #052444 48%, #031C36 100%);
+  background-attachment: fixed; }
 body { min-height: 100vh; display: flex; flex-direction: column; }
 main { flex: 1; padding: 0 24px 24px; max-width: 1280px; width: 100%; margin: 0 auto; }
-h1 { font-size: 1.35rem; margin: 0; }
-h2 { font-size: 1.1rem; margin: 0; }
+h1 { font-size: 1.35rem; margin: 0; letter-spacing: -0.03em; }
+h2 { font-size: 1.1rem; margin: 0; letter-spacing: -0.03em; }
 p { margin: 0.35rem 0; }
 code, kbd { background: var(--panel-2); border: 1px solid var(--line); padding: 1px 6px; border-radius: 6px; font-size: 0.9em; }
 .hidden { display: none !important; }
@@ -25,9 +34,18 @@ code, kbd { background: var(--panel-2); border: 1px solid var(--line); padding: 
   padding: 22px 24px; max-width: 1280px; width: 100%; margin: 0 auto; }
 .brand { display: flex; align-items: center; gap: 14px; }
 .sub { color: var(--muted); margin: 2px 0 0; font-size: 0.95rem; }
-.logo { width: 44px; height: 44px; border-radius: 12px; display: inline-block;
-  background: conic-gradient(from 200deg, var(--accent), #7ad3ff, var(--accent)); position: relative; }
-.logo::after { content: ""; position: absolute; inset: 12px; border-radius: 50%; background: var(--bg); }
+/* the ORIONPATH logo in its light-to-pink gradient: the PNG's shape as a mask over a gradient;
+   a browser without masks gets the plain light logo instead */
+.op-mark, .op-lockup { display: block; background: url("brand/lockup-264-light.png") no-repeat center / contain; }
+.op-mark { width: 44px; height: 40px; background-image: url("brand/mark-96.png"); }
+.op-lockup { width: 180px; aspect-ratio: 560 / 419; }
+@supports ((-webkit-mask-image: none) or (mask-image: none)) {
+  .op-mark, .op-lockup {
+    background: linear-gradient(160deg, #FFFFFF 0%, var(--paper) 38%, var(--pink-hi) 72%, var(--pink) 100%);
+    -webkit-mask: url("brand/lockup-560.png") no-repeat center / contain;
+    mask: url("brand/lockup-560.png") no-repeat center / contain; }
+  .op-mark { -webkit-mask-image: url("brand/mark-96.png"); mask-image: url("brand/mark-96.png"); }
+}
 
 .pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
   background: var(--panel); border: 1px solid var(--line); font-weight: 600; white-space: nowrap; }
@@ -75,8 +93,9 @@ code, kbd { background: var(--panel-2); border: 1px solid var(--line); padding: 
   font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .btn:hover { border-color: var(--accent); }
 .btn:disabled { opacity: .55; cursor: wait; }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-primary:hover { background: var(--accent-2); }
+.btn-primary { background: linear-gradient(180deg, #FFD6DF 0%, #F7B5C4 100%); border-color: transparent; color: var(--navy);
+  box-shadow: inset 0 1px 0 var(--pink-hi), inset 0 -1px 0 rgba(0,0,0,.28), 0 14px 26px -16px rgba(0,0,0,.8); }
+.btn-primary:hover { background: var(--pink-hi); }
 .btn-ghost { background: transparent; }
 .btn-danger { border-color: var(--bad); color: var(--bad); background: transparent; }
 .btn-big { padding: 16px 28px; font-size: 1.1rem; }
@@ -126,10 +145,10 @@ body.setup-mode .setup-qr { min-height: calc(100vh - 140px); }
 .pin-value { font-size: 2.4rem; font-weight: 700; letter-spacing: 0.25em; font-variant-numeric: tabular-nums; padding: 6px 0; }
 
 /* "Content unavailable" screen for the Pi Zero kiosk (unavailable.html). Always dark: it is a signage screen. */
-body.unavail { background: #0e1116; color: #e8ecf2; align-items: center; justify-content: center; text-align: center; }
+body.unavail { color: var(--paper); align-items: center; justify-content: center; text-align: center; }
 .unavail-box { padding: 24px; max-width: 90vw; }
 .unavail-title { font-size: 2rem; font-weight: 600; margin-bottom: 0.75rem; }
-.unavail-url, .unavail-detail { color: #93a0b4; font-size: 1.1rem; word-break: break-all; }
+.unavail-url, .unavail-detail { color: var(--muted); font-size: 1.1rem; word-break: break-all; }
 
 /* PIN gate: on a phone the PIN comes before anything else (S&D #193) */
 body.pin-locked main > :not(#pin-gate) { display: none !important; }
@@ -141,3 +160,51 @@ body.pin-locked main > :not(#pin-gate) { display: none !important; }
 
 /* Wi-Fi check line (S&D #193): small, but readable from a phone camera photo of the screen */
 .diag { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 0.85rem; word-break: break-word; }
+
+/* ---- Setup screen, ORIONPATH clean (Shaun, 17 Nov 06:05 CET): logo, the QR, steps 1-2-3. Nothing else. ---- */
+body.setup-mode .top, body.setup-mode .foot, body.setup-mode main > :not(#setup-card) { display: none !important; }
+body.setup-mode main { display: flex; align-items: center; padding: 5vh 6vw; max-width: none; }
+body.setup-mode .setup-qr { min-height: 0; width: 100%; max-width: 1500px; margin: 0 auto;
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; column-gap: 6vw; row-gap: 3vh;
+  align-items: center; background: none; border: 0; box-shadow: none; padding: 0; }
+body.setup-mode .setup-qr .op-lockup { grid-column: 1 / -1; width: clamp(120px, 11vw, 210px); }
+body.setup-mode .qr-big img { width: min(54vh, 520px); height: min(54vh, 520px); margin: 0; border-radius: 10px; padding: 14px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.4), 0 40px 70px -30px rgba(0,0,0,.75), 0 14px 26px -14px rgba(0,0,0,.5); }
+body.setup-mode .setup-text h2 { font-size: clamp(1.8rem, 3.2vw, 3rem); letter-spacing: -0.045em; line-height: 1.05;
+  max-width: 14ch; margin-bottom: 3.5vh; font-weight: 600; }
+body.setup-mode .qr-small, body.setup-mode .setup-text .hint:not(.diag) { display: none; }
+.steps { list-style: none; counter-reset: step; padding: 0 !important; margin: 0; display: grid; gap: 3.2vh;
+  font-size: clamp(1.1rem, 1.7vw, 1.6rem) !important; line-height: 1.35 !important; letter-spacing: -0.015em; max-width: 30ch; }
+.steps li { counter-increment: step; position: relative; padding-left: 2.4em; }
+.steps li::before { content: counter(step); font-weight: 600; color: var(--navy); background: linear-gradient(180deg, #FFD6DF, #F7B5C4);
+  position: absolute; left: 0; top: 0.05em; line-height: 1;
+  width: 1.6em; height: 1.6em; border-radius: 50%; display: grid; place-items: center; font-size: 0.85em;
+  box-shadow: inset 0 1px 0 var(--pink-hi), 0 8px 16px -8px rgba(0,0,0,.7); }
+.steps .muted { font-size: 0.8em; }
+body.setup-mode .pin-big { display: block; margin-top: 0.4em; font-size: 1.6em; font-weight: 600; letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums; color: var(--pink-hi); }
+/* Wi-Fi check line: only after a phone was refused, or with the D key (S&D #193 v8) */
+body.setup-mode #setup-diag { display: none; margin-top: 4vh; max-width: 70ch; color: var(--muted); }
+body.setup-mode #setup-diag.show { display: block; }
+@media (max-width: 900px) {
+  body.setup-mode .setup-qr { grid-template-columns: 1fr; }
+  body.setup-mode .qr-big { justify-self: center; }
+}
+
+/* ---- Phone: the PIN screen is the logo and the PIN, nothing else (Shaun, 17 Nov 06:05 CET) ---- */
+body.pin-locked .top, body.pin-locked .foot { display: none !important; }
+body.pin-locked main { display: flex; align-items: center; min-height: 100vh; }
+.pin-gate { background: none; border: 0; padding: 0 4px; text-align: left; width: 100%; }
+.pin-gate .op-lockup { width: 132px; margin-bottom: 2.25rem; }
+.pin-gate h2 { font-size: 1.9rem; letter-spacing: -0.045em; font-weight: 600; }
+.pin-gate .pin-input { background: rgba(245,242,236,.08); border-color: rgba(245,242,236,.22); }
+/* phone, after the PIN, while setting up: the brand header without the status pill */
+/* phone, after the PIN, while setting up: the logo, one line, the Wi-Fi list. The rest of the
+   settings are there again once the screen is online (Shaun, 17 Nov 06:05 CET) */
+body.phone-setup .top, body.phone-setup .foot, body.phone-setup .grid > :not(#wifi-card) { display: none !important; }
+body.phone-setup main { padding-top: 32px; }
+body.phone-setup .grid { grid-template-columns: 1fr; }
+.setup-phone .op-lockup { display: none; }
+body.phone-setup .setup-phone { display: block; background: none; border: 0; padding: 0 4px; margin-bottom: 20px; }
+body.phone-setup .setup-phone .op-lockup { display: block; width: 112px; margin-bottom: 1.75rem; }
+body.phone-setup .setup-phone strong { font-size: 1.5rem; letter-spacing: -0.04em; font-weight: 600; display: block; }

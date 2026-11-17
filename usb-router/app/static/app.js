@@ -160,6 +160,7 @@
     $("setup-card").classList.toggle("hidden", !(show && s.local));
     $("setup-phone").classList.toggle("hidden", !(show && !s.local));
     document.body.classList.toggle("setup-mode", show && s.local);
+    document.body.classList.toggle("phone-setup", show && !s.local);
     if (show && s.local && !setupShown) {
       setupShown = true;
       $("qr-wifi").src = `/api/qr?kind=wifi&t=${Date.now()}`;
@@ -177,7 +178,16 @@
     $("setup-pin").textContent = showPin ? s.settings.admin_pin : "";
     $("setup-url").textContent = h.ui_url || ""; $("setup-id").textContent = s.device.id;
     $("setup-diag").textContent = s.local ? fmtDiag(h.diag) : "";
+    // the clean screen hides it; it comes back when a phone was refused, or with the D key
+    $("setup-diag").classList.toggle("show", s.local && (diagKey || !!(h.diag && h.diag.refused)));
   };
+  let diagKey = false;
+  document.addEventListener("keydown", (e) => {
+    if ((e.key === "d" || e.key === "D") && document.body.classList.contains("setup-mode")
+        && !/^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || "")) {
+      diagKey = !diagKey; $("setup-diag").classList.toggle("show", diagKey);
+    }
+  });
 
   /* ---------------- fleet ---------------- */
   const renderFleet = (s) => {
