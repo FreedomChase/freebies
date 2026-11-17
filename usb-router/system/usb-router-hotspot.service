@@ -1,0 +1,15 @@
+[Unit]
+Description=USB Router setup hotspot on the Pi: hostapd + dnsmasq (S&D #193)
+# started and stopped by the connection manager (user kiosk) over polkit; never at boot by itself
+After=NetworkManager.service usb-router-connect.service
+
+[Service]
+Type=simple
+# root: hostapd and dnsmasq need the radio, the address and port 53. The request it reads
+# (/var/lib/usb-router/hotspot-ap.json) is validated before anything is written.
+ExecStart=/usr/bin/python3 /opt/usb-router/app/hotspot_ap.py run
+SyslogIdentifier=usb-router-hotspot
+Restart=on-failure
+RestartSec=3
+KillMode=mixed
+TimeoutStopSec=10

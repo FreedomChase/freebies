@@ -316,9 +316,12 @@
       d.channel ? `channel ${d.channel}` : "channel ?",
       `country ${d.country || "?"}`,
       `${sec}, PMF ${d.pmf || "?"}`,
+      `access point ${d.ap || "?"}`,
       `chip handshake ${d.fw_offload || "?"}`,
       `${d.stations ?? "?"} phone${d.stations === 1 ? "" : "s"} joined`,
       `last: ${d.last_event || "nothing yet"}`,
+      // the Pi has no clock battery: until it reaches internet time, log times are not real
+      d.clock === "internet" ? "clock: internet time" : `clock: ${d.clock || "?"} (log times are not real)`,
     ].join(" · ");
   };
 

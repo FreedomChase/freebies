@@ -24,3 +24,13 @@ polkit.addRule(function(action, subject) {
         return polkit.Result.YES;
     }
 });
+
+// The Pi's setup hotspot runs as its own root unit (hostapd + dnsmasq, S&D #193): kiosk may
+// start, stop and restart that one unit, nothing else in systemd.
+polkit.addRule(function(action, subject) {
+    if (subject.user === "kiosk" && action.id === "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") === "usb-router-hotspot.service" &&
+        ["start", "stop", "restart"].indexOf(action.lookup("verb")) >= 0) {
+        return polkit.Result.YES;
+    }
+});

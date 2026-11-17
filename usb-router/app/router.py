@@ -165,7 +165,8 @@ class Router:
                     if not chosen["ap_capable"]:
                         raise NetError(f"{chosen['iface']} does not support access-point mode")
                     self.nm.hotspot_start(chosen["iface"], self.cfg.get("hotspot_ssid"),
-                                          password, self.cfg.get("hotspot_band"))
+                                          password, self.cfg.get("hotspot_band"),
+                                          **({"share": True} if role == "share" else {}))
                 else:
                     self.nm.share_ethernet_start(chosen["iface"])
                 self.last_error = None

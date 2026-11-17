@@ -25,7 +25,7 @@ ARCH=$(dpkg --print-architecture)
 echo "==> packages"
 apt-get update
 # the connection manager: same as the PC stick, all from apt (python3-flask is 2.2 on Bookworm; fine)
-PKGS="network-manager dnsmasq-base iw wireless-regdb python3 python3-flask python3-qrcode python3-pil curl zram-tools"
+PKGS="network-manager dnsmasq-base hostapd nftables iw wireless-regdb python3 python3-flask python3-qrcode python3-pil curl zram-tools"
 # the screen: cog (WPE WebKit) on DRM, no X server, no window manager
 [ "$KIOSK" -eq 1 ] && PKGS="$PKGS cog libgles2 libegl1 dbus-user-session fonts-dejavu-core"
 # shellcheck disable=SC2086
@@ -78,6 +78,11 @@ else
   echo "warning: no vfat line for $BOOT in /etc/fstab: every user can read $BOOT/usb-router.conf (passwords, PIN, fleet token)"
 fi
 install -m 644 "$HERE/system/usb-router-connect.service" /etc/systemd/system/
+# the setup hotspot: hostapd + dnsmasq as root, started by the app over polkit (S&D #193).
+# hostapd's own service stays off: only this unit runs it, with a config made at each start.
+install -m 644 "$HERE/system/usb-router-hotspot.service" /etc/systemd/system/
+systemctl unmask hostapd.service >/dev/null 2>&1 || true
+systemctl disable hostapd.service >/dev/null 2>&1 || true
 install -d /etc/polkit-1/rules.d /etc/NetworkManager/conf.d
 # 40-, before Debian's pkla compat rule (49-), which refuses outside a session (S&D #191)
 rm -f /etc/polkit-1/rules.d/50-usb-router-networkmanager.rules

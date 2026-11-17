@@ -56,7 +56,7 @@ log = logging.getLogger("usb-router")
 
 cfg = Config()
 MOCK = cfg.flag("mock") or os.environ.get("USB_ROUTER_MOCK") == "1"
-nm = get_backend(MOCK)
+nm = get_backend(MOCK, cfg.get("hotspot_backend"))
 captive = Captive(cfg.get("listen_port"))
 router = Router(nm, cfg, captive=captive)
 

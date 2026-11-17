@@ -8,6 +8,7 @@ nmcli terse output (-t) separates fields with ':' and escapes literal colons
 as '\\:' so we split on unescaped colons only.
 """
 
+import json
 import os
 from pathlib import Path
 import re
@@ -219,7 +220,7 @@ class NetworkManager:
     HOTSPOT_CON = "usb-router-hotspot"
     SHARE_CON = "usb-router-share-"
 
-    def hotspot_start(self, iface, ssid, password, band="bg"):
+    def hotspot_start(self, iface, ssid, password, band="bg", share=False):
         self.hotspot_stop()
         args = ["connection", "add", "type", "wifi", "ifname", iface,
                 "con-name", self.HOTSPOT_CON, "autoconnect", "no", "ssid", ssid,
@@ -312,7 +313,21 @@ class NetworkManager:
 # --------------------------------------------------------------------------
 # Hotspot diagnostics for the screen (S&D #193: an iPhone could not join on a real Pi)
 # --------------------------------------------------------------------------
-DIAG_EVENTS = re.compile(r"AP-STA-|PSK-MISMATCH|4-Way|WRONG_KEY|pre-shared key|deauth|disassoc|"
+BRCMFMAC_CONF = "/etc/modprobe.d/usb-router-brcmfmac.conf"
+
+
+def clock_source():
+    """'internet' when systemd says the clock is synced, else 'not set' (the Pi has no RTC)."""
+    try:
+        out = _run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"], timeout=5, check=False).strip()
+        return "internet" if out == "yes" else "not set"
+    except NetError:
+        return None
+
+
+DIAG_EVENTS = re.compile(r"AP-STA-|AP-ENABLED|AP-DISABLED|IEEE 802\.11: |WPA: |nl80211:|"
+                         r"usb-router hotspot:|could not|Could not|Failed to|"
+                         r"PSK-MISMATCH|4-Way|WRONG_KEY|pre-shared key|deauth|disassoc|"
                          r"auth.*(fail|timeout|reject)|assoc.*(fail|reject)|brcmf_\w+: .*(err|fail)", re.I)
 
 
@@ -327,8 +342,9 @@ def hotspot_diag(iface, con_name):
     firmware offload), how many phones are associated, and the last join event in the journal.
     Every part is best effort: a missing tool or permission leaves that part None.
     """
-    d = {"iface": iface, "channel": None, "freq": None, "country": None, "security": None,
-         "pmf": None, "fw_offload": None, "stations": None, "last_event": None}
+    d = {"iface": iface, "ap": "NetworkManager", "channel": None, "freq": None, "country": None,
+         "security": None, "pmf": None, "fw_offload": None, "stations": None, "last_event": None,
+         "clock": clock_source()}
     iw = _tool("iw")
     try:
         m = re.search(r"channel (\d+) \((\d+) MHz\)", _run([iw, "dev", iface, "info"], timeout=5, check=False))
@@ -346,22 +362,29 @@ def hotspot_diag(iface, con_name):
         d["stations"] = len(re.findall(r"^Station ", out, re.M))
     except NetError:
         pass
+    if con_name:
+        try:
+            out = nmcli("-g", "802-11-wireless-security.key-mgmt,802-11-wireless-security.pmf",
+                        "connection", "show", con_name, check=False).splitlines()
+            if len(out) >= 2:
+                d["security"], d["pmf"] = out[0] or "open", {"1": "off", "2": "optional", "3": "required"}.get(out[1], out[1])
+        except NetError:
+            pass
+    # brcmfmac's feature_disable is not readable in /sys (module_param perm 0, so v6 showed "?"):
+    # read what modprobe will apply instead, the option in /etc/modprobe.d (S&D #193)
     try:
-        out = nmcli("-g", "802-11-wireless-security.key-mgmt,802-11-wireless-security.pmf",
-                    "connection", "show", con_name, check=False).splitlines()
-        if len(out) >= 2:
-            d["security"], d["pmf"] = out[0] or "open", {"1": "off", "2": "optional", "3": "required"}.get(out[1], out[1])
-    except NetError:
-        pass
-    try:  # brcmfmac: bit 13 FWSUP (firmware 4-way handshake), bit 19 SAE offload
-        fd = int(Path("/sys/module/brcmfmac/parameters/feature_disable").read_text().strip(), 0)
-        d["fw_offload"] = "off" if (fd & 0x2000) else "on"
+        m = re.search(r"feature_disable=(0x[0-9a-fA-F]+|\d+)", Path(BRCMFMAC_CONF).read_text())
+        d["fw_offload"] = "off" if (m and int(m.group(1), 0) & 0x2000) else "on"
     except (OSError, ValueError):
-        pass
+        d["fw_offload"] = "on"
     try:
-        out = _run(["journalctl", "-b", "--no-pager", "-o", "short", "-n", "400", "--since", "-30min",
-                    "-t", "wpa_supplicant", "-t", "kernel", "-t", "NetworkManager"], timeout=5, check=False)
-        hits = [l for l in out.splitlines() if DIAG_EVENTS.search(l)]
+        # no --since: the Pi has no clock until it reaches internet time, so journal times
+        # are not real and a time window can skip everything (S&D #193, v6)
+        out = _run(["journalctl", "-b", "--no-pager", "-o", "short", "-n", "400",
+                    "-t", "wpa_supplicant", "-t", "kernel", "-t", "NetworkManager", "-t", "hostapd",
+                    "-t", "usb-router-hotspot"], timeout=5, check=False)
+        # get_tx_power -512 is NetworkManager polling the chip, not a join event (v6 showed only that)
+        hits = [l for l in out.splitlines() if DIAG_EVENTS.search(l) and "get_tx_power" not in l]
         if hits:
             parts = hits[-1].split(None, 5)    # Mon DD HH:MM:SS host ident: message
             d["last_event"] = (parts[2] + " " + parts[5])[:160] if len(parts) == 6 else hits[-1][:160]
@@ -455,7 +478,7 @@ class MockNetworkManager:
     def ethernet_connect(self, iface):
         self.ethernet_plugged = True
 
-    def hotspot_start(self, iface, ssid, password, band="bg"):
+    def hotspot_start(self, iface, ssid, password, band="bg", share=False):
         self.hotspot = {"iface": iface, "ssid": ssid, "mode": "wifi"}
 
     def hotspot_diag(self, iface):
@@ -521,5 +544,103 @@ def internet_check(url, fallback_url=None, timeout=5, mock_backend=None):
     return {"online": False, "captive_portal": False, "portal_url": None, "verdict": "none"}
 
 
-def get_backend(mock: bool):
-    return MockNetworkManager() if mock else NetworkManager()
+class HostapdNetworkManager(NetworkManager):
+    """
+    NetworkManager for everything, except the Wi-Fi setup hotspot: hostapd + dnsmasq run it as
+    root through usb-router-hotspot.service (app/hotspot_ap.py), started over polkit (S&D #193).
+    The app writes the request (interface, SSID, password, channel) to a 0600 JSON file the
+    service validates. NetworkManager lets go of the interface while the hotspot is up.
+    """
+    name = "networkmanager+hostapd"
+    UNIT = "usb-router-hotspot.service"
+    LEASES = "/run/usb-router-ap/leases"
+
+    def __init__(self, state_dir=None):
+        self.state_dir = state_dir or os.environ.get("USB_ROUTER_STATE_DIR", "/var/lib/usb-router")
+        self.request_path = os.path.join(self.state_dir, "hotspot-ap.json")
+
+    def _request(self):
+        try:
+            with open(self.request_path, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def _unit_active(self):
+        try:
+            return _run(["systemctl", "is-active", self.UNIT], timeout=10, check=False).strip() == "active"
+        except NetError:
+            return False
+
+    def hotspot_start(self, iface, ssid, password, band="bg", share=False):
+        self.hotspot_stop()
+        req = {"iface": iface, "ssid": ssid, "password": password, "band": band,
+               "channel": 6 if band != "a" else 36, "country": "ES", "share": bool(share)}
+        tmp = self.request_path + ".tmp"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump(req, f)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, self.request_path)
+        nmcli("device", "set", iface, "managed", "no", check=False)
+        try:
+            _run(["systemctl", "start", self.UNIT], timeout=45)
+        except NetError:
+            nmcli("device", "set", iface, "managed", "yes", check=False)
+            raise
+        for _ in range(20):           # hostapd up and 10.42.0.1 on the interface
+            if self._unit_active() and self._ip_of(iface):
+                return
+            time.sleep(0.5)
+        if not self._unit_active():
+            nmcli("device", "set", iface, "managed", "yes", check=False)
+            raise NetError("The Wi-Fi hotspot (hostapd) did not start; the screen's Wi-Fi check line says why")
+
+    def hotspot_stop(self):
+        super().hotspot_stop()        # a NetworkManager hotspot left from an older image
+        iface = self._request().get("iface")
+        _run(["systemctl", "stop", self.UNIT], timeout=30, check=False)
+        if iface:
+            nmcli("device", "set", iface, "managed", "yes", check=False)
+
+    def hotspot_status(self):
+        if self._unit_active():
+            iface = self._request().get("iface")
+            if iface:
+                return {"active": True, "iface": iface, "mode": "wifi",
+                        "ip": self._ip_of(iface), "clients": self.hotspot_clients(iface)}
+        return super().hotspot_status()
+
+    def hotspot_clients(self, iface):
+        clients = {c["mac"]: c for c in super().hotspot_clients(iface)}
+        try:
+            with open(self.LEASES, encoding="utf-8") as fh:
+                for line in fh:
+                    parts = line.split()
+                    if len(parts) >= 4:
+                        c = clients.setdefault(parts[1], {"ip": parts[2], "mac": parts[1], "name": None})
+                        c["name"] = parts[3] if parts[3] != "*" else c["name"]
+        except OSError:
+            pass
+        return list(clients.values())
+
+    def hotspot_diag(self, iface):
+        d = hotspot_diag(iface, None)
+        req = self._request()
+        d["ap"] = "hostapd"
+        d["security"], d["pmf"] = ("wpa-psk", "off") if req.get("password") else (None, None)
+        return d
+
+
+def hostapd_ready():
+    return os.path.exists("/usr/sbin/hostapd") and os.path.exists(
+        "/etc/systemd/system/" + HostapdNetworkManager.UNIT)
+
+
+def get_backend(mock: bool, hotspot_backend: str = "auto"):
+    """auto: hostapd for the hotspot when the image has it (the Pi), else NetworkManager."""
+    if mock:
+        return MockNetworkManager()
+    if hotspot_backend == "hostapd" or (hotspot_backend == "auto" and hostapd_ready()):
+        return HostapdNetworkManager()
+    return NetworkManager()

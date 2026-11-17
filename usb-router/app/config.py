@@ -42,6 +42,7 @@ DEFAULTS = {
     "hotspot_ssid": "USB-Router",
     "hotspot_password": "",           # blank = a unique random password is generated per stick at first boot
     "hotspot_band": "bg",             # bg = 2.4 GHz (widest compatibility), a = 5 GHz
+    "hotspot_backend": "auto",        # auto = hostapd when the image has it (the Pi, S&D #193), else NetworkManager
     "listen_host": "127.0.0.1",
     "listen_port": "8080",
     "lan_access": "true",             # serve the UI on the hotspot side too (phone-based setup)
