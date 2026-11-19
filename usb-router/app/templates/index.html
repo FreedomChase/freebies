@@ -122,6 +122,7 @@
       <input id="go-url" class="input grow" type="url" placeholder="or type a web address…" spellcheck="false">
     </div>
     <p class="hint">Content: <code id="online-homepage"></code>. The screen opens it on its own in a few seconds.</p>
+    <p id="content-check" class="error hidden" role="status"></p>
   </section>
 
   <div class="grid">
@@ -206,7 +207,7 @@
 
     <!-- Admin PIN: only rendered for the physical screen (server sends it to loopback only) -->
     <section class="card pin hidden" id="pin-card">
-      <div class="card-head"><h2>Admin PIN</h2><span class="tag" id="pin-source"></span></div>
+      <div class="card-head"><h2 id="pin-title">Admin PIN</h2><span class="tag" id="pin-source"></span></div>
       <div class="pin-value" id="pin-value"></div>
       <p class="hint" id="pin-hint">Every change to this screen, from here or from a phone on its hotspot, needs this PIN. It is only ever shown on this screen.</p>
       <p id="setup-window-note" class="muted"></p>

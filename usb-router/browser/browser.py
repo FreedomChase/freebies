@@ -107,7 +107,7 @@ class Browser(QMainWindow):
         self.resize(1280, 800)
         self.kiosk = args.kiosk
         self.allow_exit = True
-        self.homepage = args.home or "https://duckduckgo.com"
+        self.homepage = args.home or "https://www.vvcapital.se/tv"
         self.connect_mode = not args.no_connect
         self.html_fullscreen = False
         self.reload_every = 0
@@ -280,9 +280,8 @@ class Browser(QMainWindow):
         if not text:
             return
         if " " in text or ("." not in text and not text.startswith("localhost")):
-            url = QUrl("https://duckduckgo.com/?q=" + QUrl.toPercentEncoding(text).data().decode())
-        else:
-            url = QUrl.fromUserInput(text)
+            return                      # C&G #270: no search engine; the bar takes web addresses only
+        url = QUrl.fromUserInput(text)
         self.current().setUrl(url)
         self.current().setFocus()
 

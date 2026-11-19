@@ -73,7 +73,7 @@ class World:
 
 def make():
     w, cog = World(), FakeCog()
-    k = K.Kiosk(cog, CONNECT, fetch=w.fetch, check=w.check, clock=w.clock)
+    k = K.Kiosk(cog, CONNECT, fetch=w.fetch, check=w.check, clock=w.clock, synced=lambda: True)
     k.start()
     return w, cog, k
 

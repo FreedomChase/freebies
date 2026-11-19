@@ -157,7 +157,7 @@ All keys are in `config/usb-router.conf.example`. The important ones:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `homepage` | duckduckgo.com | Content URL. `{device_id}` and `{device_name}` are replaced |
+| `homepage` | www.vvcapital.se/tv | Content URL. `{device_id}` and `{device_name}` are replaced |
 | `kiosk` | `true` | Fullscreen, no toolbar, once online |
 | `rotation` | `normal` | `left` / `right` for portrait screens, `inverted` |
 | `reload_every` | `0` | Reload the content every N minutes |

@@ -11,6 +11,8 @@ Environment=PYTHONUNBUFFERED=1
 Environment=USB_ROUTER_STATE_DIR=/var/lib/usb-router
 ExecStartPre=+/bin/mkdir -p /var/lib/usb-router
 ExecStartPre=+/bin/chown kiosk:netdev /var/lib/usb-router
+# C&G #270: reset-settings.txt on the boot drive clears the settings saved on the screen, once
+ExecStartPre=+/bin/sh /opt/usb-router/system/usb-router-reset-settings.sh /var/lib/usb-router
 # captive portal (S&D #193): dnsmasq reads this file through the link in
 # /etc/NetworkManager/dnsmasq-shared.d, so it must exist before any hotspot
 ExecStartPre=+/bin/sh -c 'f=/var/lib/usb-router/captive-dns.conf; [ -e "$f" ] || : > "$f"; chown kiosk:netdev "$f"; chmod 644 "$f"'

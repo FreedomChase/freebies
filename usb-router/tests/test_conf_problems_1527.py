@@ -1,6 +1,6 @@
 """P&T #1527 (found on site, C&G #254): Shaun added a second homepage line to usb-router.conf
 instead of changing the shipped one. configparser raised DuplicateOptionError, the player
-dropped the WHOLE file and showed DuckDuckGo. Now a repeated setting = the last one wins, a bad
+dropped the WHOLE file and showed the built-in default. Now a repeated setting = the last one wins, a bad
 line is skipped instead of being fatal, and every problem is said on the screen."""
 import importlib, os, sys
 
@@ -38,9 +38,9 @@ def _line_of(text, prefix):
 
 # -- the on-site case ------------------------------------------------------------
 def test_shauns_file_second_homepage_line_wins(tmp_path, monkeypatch):
-    text = _example().rstrip("\n") + f"\nhomepage = {VVC_TV}\n"
+    text = _example().rstrip("\n") + "\nhomepage = https://www.vvcapital.se/tv?screen=2\n"
     cfg = _config(tmp_path, monkeypatch, text)
-    assert cfg.get("homepage") == VVC_TV                       # was https://duckduckgo.com
+    assert cfg.get("homepage") == "https://www.vvcapital.se/tv?screen=2"      # v8.7: the built-in default
     first, last = _line_of(text, "homepage ="), len(text.splitlines())
     problems = cfg.conf_problems()
     assert problems == [f"usb-router.conf: homepage is set 2 times (lines {first}, {last}); "
@@ -88,7 +88,7 @@ def test_bad_line_number_is_right_without_a_header(tmp_path, monkeypatch):
 
 def test_misspelt_setting_is_named(tmp_path, monkeypatch):
     cfg = _config(tmp_path, monkeypatch, "[usb-router]\nhome_page = https://a.example\nwifi_pasword = x\n")
-    assert cfg.get("homepage") == "https://duckduckgo.com"
+    assert cfg.get("homepage") == VVC_TV                                     # the default (C&G #270)
     assert cfg.conf_problems() == ["usb-router.conf, lines 2, 3: not a setting the player knows, so it is "
                                    "ignored. Check the spelling of the name before the = sign."]
 
@@ -103,8 +103,8 @@ def test_problems_never_carry_a_value(tmp_path, monkeypatch):
 # -- the second on-site cause: a Save on the screen beats the file ---------------------
 def test_saved_homepage_that_beats_the_file_is_said(tmp_path, monkeypatch):
     cfg = _config(tmp_path, monkeypatch, f"[usb-router]\nhomepage = {VVC_TV}\n",
-                  saved={"homepage": "https://duckduckgo.com"})
-    assert cfg.get("homepage") == "https://duckduckgo.com"
+                  saved={"homepage": "https://saved.example"})
+    assert cfg.get("homepage") == "https://saved.example"
     assert cfg.conf_problems() == ["Content URL was saved on this screen, so homepage in usb-router.conf "
                                    "is not used. Change it here: editing the file will not change it."]
 
@@ -183,7 +183,7 @@ def test_the_on_site_repeat_comes_first_with_stray_lines_around_it(tmp_path, mon
 
 def test_a_save_on_the_screen_ranks_above_a_typo(tmp_path, monkeypatch):
     cfg = _config(tmp_path, monkeypatch, f"[usb-router]\nhome_page = x\nhomepage = {VVC_TV}\n",
-                  saved={"homepage": "https://duckduckgo.com"})
+                  saved={"homepage": "https://saved.example"})
     assert cfg.conf_problems()[0].startswith("Content URL was saved on this screen")
 
 
@@ -191,7 +191,7 @@ def test_bare_web_address_is_named_as_one(tmp_path, monkeypatch):
     cfg = _config(tmp_path, monkeypatch, f"[usb-router]\nkiosk = true\n{VVC_TV}\n")
     assert cfg.conf_problems() == ["usb-router.conf, line 3: a web address on its own, not a setting, so it "
                                    "is ignored. To show it, write homepage = in front of it."]
-    assert cfg.get("homepage") == "https://duckduckgo.com"
+    assert cfg.get("homepage") == VVC_TV                                     # the default (C&G #270)
 
 
 def test_indented_line_that_joins_the_homepage_is_named(tmp_path, monkeypatch):

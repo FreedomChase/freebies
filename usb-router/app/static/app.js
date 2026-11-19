@@ -57,6 +57,10 @@
     }
     $("portal-banner").classList.toggle("hidden", !s.captive_portal);
     $("online-homepage").textContent = s.settings.resolved_homepage;
+    // C&G #270: the screen's own content check, so a phone can see why the TV says "Content unavailable"
+    const cc = s.content_check;
+    $("content-check").classList.toggle("hidden", !cc);
+    $("content-check").textContent = cc ? `The screen could not open it: ${cc.failed} (tried ${cc.fails} ${cc.fails === 1 ? "time" : "times"}). Tap Show content to open it anyway.` : "";
     $("device-label").textContent = (s.device.name ? `${s.device.name} · ` : "") + s.device.id;
     if (s.local && s.settings.admin_pin) rememberPin(s.settings.admin_pin);
     renderGate(s);
@@ -120,11 +124,15 @@
   };
 
   /* ---------------- admin PIN panel (screen only) ---------------- */
+  let pinLocal = true;
   const renderPin = (s) => {
     const box = $("pin-card");
     // C&G #254 v8.7: a phone gets this card too, for the phone-setup window buttons only (CSS hides the PIN)
     box.classList.remove("hidden");
     box.classList.toggle("remote", !s.local);
+    // C&G #270 (dev4's raise on #254): a phone sees only the setup-window buttons here, so name it for that
+    $("pin-title").textContent = s.local ? "Admin PIN" : "Phone setup";
+    pinLocal = !!s.local;
     $("lan-hint").textContent = s.lan_url ? `From a phone on the same Wi-Fi: ${s.lan_url}` : "";
     const isDefault = s.settings.admin_pin_source === "default";   // the shared default PIN is never displayed
     $("pin-value").textContent = isDefault ? "Default PIN" : (s.settings.admin_pin || "");
@@ -150,7 +158,10 @@
     if (on) $("settings-card").scrollIntoView({ block: "start", behavior: "smooth" });
   };
   $("setup-open").onclick = async () => { try { await api("/api/setup-mode", { method: "POST", body: { action: "open" } }); toast("Phone setup allowed for 15 minutes", "ok"); } catch (e) { toast(e.message, "bad"); } refreshStatus(true); };
-  $("setup-close").onclick = async () => { try { await api("/api/setup-mode", { method: "POST", body: { action: "close" } }); } catch (e) { toast(e.message, "bad"); } refreshStatus(true); };
+  $("setup-close").onclick = async () => {
+    // C&G #270 (dev4's raise on #254): from a phone on the hotspot this drops that phone's own link
+    if (!pinLocal && !window.confirm("Stop phone setup? The screen's hotspot closes, so this phone loses its link to the screen.")) return;
+    try { await api("/api/setup-mode", { method: "POST", body: { action: "close" } }); } catch (e) { toast(e.message, "bad"); } refreshStatus(true); };
   document.querySelectorAll("[data-rotate]").forEach((b) => {
     b.onclick = async () => {
       if (!confirm(`Generate a new ${b.dataset.rotate === "admin_pin" ? "admin PIN" : "hotspot password"} for this screen?`)) return;

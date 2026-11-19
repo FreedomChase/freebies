@@ -22,7 +22,7 @@ from pathlib import Path
 
 DEFAULTS = {
     # -- what the screen shows
-    "homepage": "https://duckduckgo.com",  # may contain {device_id} and {device_name}
+    "homepage": "https://www.vvcapital.se/tv",  # C&G #270: the VVC scoreboard; may contain {device_id} and {device_name}
     "kiosk": "true",                  # true = browser goes fullscreen with no toolbar once online
     "allow_exit": "false",            # false = hide the Quit button in the browser
     "reload_every": "0",              # minutes; 0 = never reload the page on a timer
@@ -192,14 +192,26 @@ def _read_conf(path):
     for n, _, key, kind in scan:
         if kind == "set" and key in DEFAULTS:
             by_key.setdefault(key, []).append(n)
-    for key, lines in by_key.items():
-        if len(lines) > 1:
-            ranked.append((0, lines[0], f"{name}: {key} is set {len(lines)} times ({_lines(lines)}); "
-                                        f"the last one, line {lines[-1]}, is used."))
     joined = {}
     for n, _, key, kind in scan:
         if kind == "joined" and key in DEFAULTS:
             joined.setdefault(key, []).append(n)
+    for key, lines in by_key.items():
+        if len(lines) > 1:
+            onto = [j for j in joined.get(key, []) if j > lines[-1]]
+            if onto:   # C&G #270 (dev4's raise on #1528): the used line is itself broken by a join: one sentence
+                ranked.append((0, lines[0], f"{name}: {key} is set {len(lines)} times ({_lines(lines)}); the last one, "
+                                            f"line {lines[-1]}, is used, but {_lines(onto)} {'starts' if len(onto) == 1 else 'start'} "
+                                            f"with a space, so {'it is' if len(onto) == 1 else 'they are'} added to it and {key} "
+                                            f"is wrong. Remove the space at the start."))
+                rest = [j for j in joined[key] if j not in onto]
+                if rest:
+                    joined[key] = rest
+                else:
+                    del joined[key]
+            else:
+                ranked.append((0, lines[0], f"{name}: {key} is set {len(lines)} times ({_lines(lines)}); "
+                                            f"the last one, line {lines[-1]}, is used."))
     for key, lines in joined.items():
         one = len(lines) == 1
         ranked.append((1, lines[0], f"{name}, {_lines(lines)}: {'starts' if one else 'start'} with a space, "
@@ -248,8 +260,11 @@ class Config:
             section = parser["usb-router"] if parser.has_section("usb-router") else parser["DEFAULT"]
             for key in DEFAULTS:
                 if key in section:
-                    self.values[key] = section[key]
-                    self.file_values[key] = section[key]
+                    value = _unquote(section[key])     # C&G #270: homepage = "https://..." meant the address
+                    if key == "homepage" and value and not value.lower().startswith(("http://", "https://")):
+                        value = "https://" + value
+                    self.values[key] = value
+                    self.file_values[key] = value
 
     def _load_env(self):
         for key in DEFAULTS:

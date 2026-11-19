@@ -4,13 +4,16 @@
 # (a normal FAT drive, editable from Windows or macOS). Settings changed from
 # the on-screen page or the fleet dashboard are saved on the stick and override
 # the values here.
+# To make this file count again after a change on the screen, put an empty file called
+# reset-settings.txt next to it: the next start forgets the screen's saved settings, once.
 
 [usb-router]
 # ---------------------------------------------------------------- content ---
 # What the screen shows once online. {device_id} and {device_name} are replaced,
 # so one file can serve a whole batch of sticks:
 #   homepage = https://signage.example.com/play?screen={device_id}
-homepage = https://duckduckgo.com
+# Change THIS line (do not add a second one), no quotes needed.
+homepage = https://www.vvcapital.se/tv
 
 # true  = fullscreen, no address bar (signage). F11 or Esc brings the bar back,
 #         Ctrl+N opens this setup page.

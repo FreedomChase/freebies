@@ -47,6 +47,34 @@ DEFAULT_CONNECT_URL = os.environ.get("USB_ROUTER_CONNECT_URL", "http://127.0.0.1
 PROBE_EVERY = 30          # seconds between content checks while it is showing
 POLL_SETUP = 2            # seconds between polls on the setup page
 POLL_CONTENT = 4          # seconds between polls once content shows
+CLOCK_WAIT = 90           # C&G #270: seconds to wait for the network clock before the first content check
+TIMESYNC_FLAG = "/run/systemd/timesync/synchronized"
+LAST_CHECK = {"ok": None, "why": ""}   # the last content check, in plain words, for the phone page
+
+
+def clock_synced(flag=TIMESYNC_FLAG):
+    """True once systemd-timesyncd has set the clock (or when the image has no timesyncd at all).
+    The Pi has no clock battery: until NTP answers it runs on the time saved at the last shutdown,
+    and a certificate issued after that time reads as 'not yet valid'."""
+    return os.path.exists(flag) or not os.path.isdir(os.path.dirname(flag))
+
+
+def _why(e):
+    """an exception from the content check as a short plain reason (never a body or a header)"""
+    s = str(getattr(e, "reason", "") or e).lower()
+    if "not yet valid" in s:
+        return "the screen's clock is behind (certificate not valid yet)"
+    if "certificate" in s or "ssl" in s:
+        return "secure connection failed (certificate)"
+    if "timed out" in s or isinstance(e, TimeoutError):
+        return "no answer in time"
+    if "name or service not known" in s or "temporary failure in name resolution" in s or "nodename" in s:
+        return "the address could not be found (DNS)"
+    if "refused" in s:
+        return "connection refused"
+    if "unreachable" in s:
+        return "network unreachable"
+    return type(e).__name__
 
 
 def fetch_json(url, timeout=3, data=None):
@@ -60,15 +88,18 @@ def fetch_json(url, timeout=3, data=None):
 
 
 def probe(url, timeout=8):
-    """True when the content server answers below 500. TLS errors count as down (cog refuses them too)."""
+    """True when the content server answers below 500. TLS errors count as down (cog refuses them too).
+    C&G #270: the reason for a failure is kept in LAST_CHECK for the phone page."""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "usb-router-kiosk"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status < 500
+            ok, why = resp.status < 500, f"the server answered {resp.status}"
     except urllib.error.HTTPError as e:
-        return e.code < 500
-    except Exception:
-        return False
+        ok, why = e.code < 500, f"the server answered {e.code}"
+    except Exception as e:
+        ok, why = False, _why(e)
+    LAST_CHECK.update(ok=ok, why="" if ok else why)
+    return ok
 
 
 class Cog:
@@ -123,7 +154,7 @@ class Kiosk:
     """The decision logic, kept apart from cog and the clock so it can be tested."""
 
     def __init__(self, browser, connect_url=DEFAULT_CONNECT_URL, fetch=fetch_json, check=probe,
-                 clock=time.monotonic, home=None):
+                 clock=time.monotonic, home=None, synced=clock_synced):
         self.b = browser
         self.connect = connect_url.rstrip("/")
         self.fetch = fetch
@@ -141,6 +172,8 @@ class Kiosk:
         self.reload_every = 0
         self.next_reload = None
         self.control_failures = 0     # cogctl calls that failed and forced a cog restart
+        self.synced = synced
+        self.online_since = None      # C&G #270: when the setup page first saw the network up
 
     # -- helpers -----------------------------------------------------------
     def setup_url(self):
@@ -189,6 +222,8 @@ class Kiosk:
             return True
         self.fails += 1
         delay = min(60, 5 * 2 ** min(self.fails - 1, 4))
+        self.fetch(self.connect + "/api/browser/report",
+                   data={"url": url, "check": LAST_CHECK.get("why") or "no answer", "fails": self.fails})
         self.mode = "unavailable"
         self.retry_at = now + delay
         self._open(self.unavailable_url(url, delay))
@@ -234,6 +269,11 @@ class Kiosk:
                 # C&G #254 v8.7: a join just worked; the setup page shows the phone address for a moment
                 return "holding"
             if online and home:
+                # C&G #270: give the network clock up to CLOCK_WAIT s first, so a fresh flash does not
+                # start on "Content unavailable" just because its clock is behind
+                self.online_since = self.online_since if self.online_since is not None else now
+                if not self.synced() and now - self.online_since < CLOCK_WAIT:
+                    return "waiting-clock"
                 self.homepage = home
                 self.show_content(home)
                 return "left-setup"

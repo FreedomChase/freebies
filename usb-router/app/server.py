@@ -73,6 +73,7 @@ _state = {
     "browser_target": None,     # URL the browser should navigate to, consumed once
     "browser_action": None,     # reload | restart, consumed once
     "current_url": None,        # what the browser last reported showing
+    "content_check": None,      # C&G #270: the kiosk's last failed content check, or None
     "provisioned": [],          # Wi-Fi profiles created from the config at startup
 }
 _state_lock = threading.Lock()
@@ -257,6 +258,7 @@ def api_status():
         "device": {"id": cfg.device_id(), "name": cfg.get("device_name"), "provisioned": _state["provisioned"]},
         "fleet": fleet.info(),
         "current_url": _state["current_url"],
+        "content_check": _state["content_check"],
         "power": _state.get("power"),
         "backend": nm.name,
         "join": _join_for(nm.join_state()),
@@ -593,7 +595,12 @@ def api_browser_report():
     if not _is_local():
         abort(403)
     with _state_lock:
-        _state["current_url"] = (body().get("url") or "")[:2000] or None
+        b = body()
+        if not b.get("check"):          # a failed check reports the URL it tried, not one being shown
+            _state["current_url"] = (b.get("url") or "")[:2000] or None
+        # C&G #270: the kiosk's content check, for the phone page ("" = it passed)
+        _state["content_check"] = {"failed": str(b.get("check") or "")[:120], "fails": int(b.get("fails") or 0),
+                                   "at": int(time.time())} if b.get("check") else None
     return jsonify({"ok": True})
 
 
