@@ -85,6 +85,14 @@ def generate_password(length=12) -> str:
     return "".join(secrets.choice(PASSWORD_ALPHABET) for _ in range(length))
 
 
+def _unquote(value) -> str:
+    """C&G #254: 'wifi_password = "secret"' in usb-router.conf means secret, not the quotes too."""
+    v = (value or "").strip()
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+        v = v[1:-1]
+    return v
+
+
 def generate_pin() -> str:
     return "".join(secrets.choice(string.digits) for _ in range(6))
 
@@ -328,9 +336,9 @@ class Config:
         """[(ssid, password), ...] from the config file, for zero-touch setup."""
         out = []
         for suffix in ("", "_2", "_3"):
-            ssid = self.get("wifi_ssid" + suffix).strip()
+            ssid = _unquote(self.get("wifi_ssid" + suffix))
             if ssid:
-                out.append((ssid, self.get("wifi_password" + suffix) or None))
+                out.append((ssid, _unquote(self.get("wifi_password" + suffix)) or None))
         return out
 
     def public(self, local: bool = False) -> dict:

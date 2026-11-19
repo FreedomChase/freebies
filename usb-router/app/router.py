@@ -34,8 +34,14 @@ class Router:
         self.role = None            # why the hotspot is up: "setup" | "share" | "manual"
         self.setup_until = 0.0      # Ctrl+N / "Allow phone setup" re-opens setup mode until this time
         self.booted = time.time()
+        self.ever_online = False    # C&G #254: online at least once since this process started
 
     SETUP_WINDOW = 15 * 60
+    # C&G #254: a configured screen (Wi-Fi in usb-router.conf or saved) that has not been online
+    # since boot opens the phone setup hotspot after this long, for SETUP_WINDOW, then gives the
+    # radio back to the configured Wi-Fi for FALLBACK_WAIT again, and so on. Before this a Wi-Fi
+    # in the config that never connected left the screen offline with no way in from a phone.
+    FALLBACK_WAIT = 3 * 60
 
     # -- discovery ---------------------------------------------------------
     def uplink(self, devices=None):
@@ -99,6 +105,8 @@ class Router:
           off    everything else; in particular once the screen is online the
                  setup hotspot goes away
         """
+        if online:
+            self.ever_online = True
         if self.auto_disabled:
             return "off"
         if online:
@@ -109,7 +117,18 @@ class Router:
             return "off"  # give a provisioned Wi-Fi a chance to connect first
         if not self.is_configured() or self.setup_window_open():
             return "setup"
+        if self.fallback_due():
+            return "setup"
         return "off"
+
+    def fallback_due(self):
+        """C&G #254: configured but never online since boot -> setup hotspot in a repeating window."""
+        if self.ever_online:
+            return False
+        since = time.time() - self.booted - self.FALLBACK_WAIT
+        if since < 0:
+            return False
+        return since % (self.SETUP_WINDOW + self.FALLBACK_WAIT) < self.SETUP_WINDOW
 
     def tick(self, online):
         """One keeper step. Returns the action taken (for tests/logging)."""

@@ -204,8 +204,18 @@ class NetworkManager:
         return None          # only the hotspot backend joins blind, with the phone gone (C&G #209)
 
     def ensure_profile(self, ssid, password=None, priority=10):
-        """Create a saved, auto-connecting profile (zero-touch provisioning). No-op if it exists."""
+        """Create a saved, auto-connecting profile (zero-touch provisioning).
+
+        C&G #254: a profile that already exists gets the config's password and priority, so a
+        password corrected in usb-router.conf takes effect at the next boot (it used to be ignored).
+        Returns True when a profile was created, False when an existing one was updated.
+        """
         if ssid in {c["name"] for c in self.saved_connections()}:
+            args = ["connection", "modify", ssid,
+                    "connection.autoconnect", "yes", "connection.autoconnect-priority", str(priority)]
+            if password:
+                args += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
+            nmcli(*args)
             return False
         args = ["connection", "add", "type", "wifi", "con-name", ssid, "ssid", ssid,
                 "connection.autoconnect", "yes", "connection.autoconnect-priority", str(priority)]
@@ -521,9 +531,13 @@ class MockNetworkManager:
         return getattr(self, "last_join", None)
 
     def ensure_profile(self, ssid, password=None, priority=10):
+        self.profile_psk = getattr(self, "profile_psk", {})
         if ssid in self.saved:
+            if password:
+                self.profile_psk[ssid] = password      # C&G #254: an existing profile is updated
             return False
         self.saved.add(ssid)
+        self.profile_psk[ssid] = password
         self.provisioned = getattr(self, "provisioned", []) + [ssid]
         return True
 

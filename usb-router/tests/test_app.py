@@ -816,3 +816,39 @@ def test_page_has_the_join_banner_and_the_phone_drop_note(client):
     html = client.get("/").get_data(as_text=True)
     for el in ('id="join-banner"', 'id="setup-join"', 'id="wifi-drop"', 'id="wifi-drop-ssid"'):
         assert el in html
+
+
+# -- C&G #254: Wi-Fi from usb-router.conf ------------------------------------------------------
+def test_config_wifi_never_online_falls_back_to_the_setup_hotspot(client):
+    srv, rt = client.server, client.server.router
+    srv.cfg.values["wifi_ssid"] = "Venue"
+    assert rt.is_configured() is True
+    t0 = __import__("time").time()
+    rt.booted = t0 - 60
+    assert rt.desired(online=False) == "off"            # still giving the config Wi-Fi its chance
+    rt.booted = t0 - rt.FALLBACK_WAIT - 5
+    assert rt.desired(online=False) == "setup"          # never joined: the phone can get in
+    assert rt.tick(online=False) == "started-setup"
+    rt.booted = t0 - rt.FALLBACK_WAIT - rt.SETUP_WINDOW - 5
+    assert rt.desired(online=False) == "off"            # radio back to the config Wi-Fi for a while
+    assert rt.tick(online=False) == "stopped-setup"
+    rt.booted = t0 - 2 * rt.FALLBACK_WAIT - rt.SETUP_WINDOW - 5
+    assert rt.desired(online=False) == "setup"          # and round again
+    # once it has been online, a later outage does not raise the hotspot
+    assert rt.desired(online=True) == "off"
+    assert rt.ever_online is True
+    assert rt.desired(online=False) == "off"
+
+
+def test_config_wifi_password_reaches_an_existing_profile(client):
+    nm = client.server.nm
+    assert nm.ensure_profile("Office", "oldpass11") is True
+    assert nm.ensure_profile("Office", "newpass22") is False
+    assert nm.profile_psk["Office"] == "newpass22"
+
+
+def test_config_wifi_quotes_are_not_part_of_the_password(client):
+    cfg = client.server.cfg
+    cfg.values.update({"wifi_ssid": ' "VVAdmin" ', "wifi_password": "'s3cret pass'",
+                       "wifi_ssid_2": "Plain", "wifi_password_2": 'ab"c'})
+    assert cfg.provisioned_wifi()[:2] == [("VVAdmin", "s3cret pass"), ("Plain", 'ab"c')]
