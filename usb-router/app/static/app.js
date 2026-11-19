@@ -203,9 +203,21 @@
     $("setup-pin").textContent = showPin ? s.settings.admin_pin : "";
     $("setup-url").textContent = h.ui_url || ""; $("setup-id").textContent = s.device.id;
     renderJoin(s, show);
+    renderConf(s, show);
     $("setup-diag").textContent = s.local ? [fmtDiag(h.diag), fmtJoin(s.join)].filter(Boolean).join(" · ") : "";
     // the clean screen hides it; it comes back when a phone was refused, or with the D key
     $("setup-diag").classList.toggle("show", s.local && (diagKey || !!(h.diag && h.diag.refused)));
+  };
+  /* P&T #1527: usb-router.conf problems. The settings page lists them all; the setup QR card
+     on the screen says how many and the first one, so a TV across the room still shows it. */
+  const renderConf = (s, setupShowing) => {
+    const list = (s.settings && s.settings.conf_problems) || [];
+    $("conf-banner").classList.toggle("hidden", !list.length || (s.local && setupShowing));
+    $("conf-list").innerHTML = list.map((p) => `<li>${esc(p)}</li>`).join("");
+    const line = $("setup-conf");
+    line.classList.toggle("hidden", !(s.local && list.length));
+    if (list.length) line.innerHTML = `<strong>Check the config file:</strong> ${esc(list[0])}`
+      + (list.length > 1 ? ` <span class="muted">(+${list.length - 1} more on the settings page)</span>` : "");
   };
   /* ---------------- venue join on the screen (C&G #209 v8.3) ----------------
      The phone drops off when the hotspot stops, so the screen is where the join is seen:

@@ -76,6 +76,8 @@
         <li>Pick the venue's Wi-Fi.</li>
       </ol>
       <p class="join-line hidden" id="setup-join" role="status"></p>
+      <!-- P&T #1527: usb-router.conf has a problem (a setting twice, a bad line, a typo) -->
+      <div class="conf-line hidden" id="setup-conf" role="status"></div>
       <figure class="qr-small">
         <img id="qr-ui" alt="QR code for the setup page" width="110" height="110">
         <figcaption>Page did not open? Scan this, or go to <strong id="setup-url"></strong></figcaption>
@@ -87,6 +89,11 @@
 
   <!-- A venue join in progress, or how the last one ended (C&G #209 v8.3) -->
   <section id="join-banner" class="banner join-banner hidden" role="status"></section>
+
+  <!-- P&T #1527: what is wrong with usb-router.conf, and settings a Save here now overrides -->
+  <section id="conf-banner" class="banner conf-banner hidden" role="status">
+    <div><strong>Check the config file</strong><ul id="conf-list" class="conf-list"></ul></div>
+  </section>
 
   <!-- Phone side of the setup hotspot (the captive page lands here) -->
   <section id="setup-phone" class="banner setup-phone hidden">

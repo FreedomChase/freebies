@@ -15,6 +15,7 @@ are saved to STATE_DIR/settings.json and override the .conf values.
 import configparser
 import json
 import os
+import re
 import secrets
 import string
 from pathlib import Path
@@ -55,6 +56,10 @@ DEFAULTS = {
 
 # One default PIN for every box, written at image build from the node vault
 # (DISPLAY_PLAYER_DEFAULT_PIN, S&D #193). Never in git. A per-box New PIN overrides it.
+# names the settings page uses for a key, for the "saved here beats the file" line
+OVERRIDE_LABELS = {"homepage": "Content URL", "hotspot_ssid": "Hotspot name", "hotspot_password": "Hotspot password",
+                   "reload_every": "Reload content every", "device_name": "Screen name", "fleet_url": "Dashboard URL"}
+
 DEFAULT_PIN_PATHS = ["/etc/usb-router/default-pin"]
 
 CONF_PATHS = [
@@ -97,6 +102,26 @@ def generate_pin() -> str:
     return "".join(secrets.choice(string.digits) for _ in range(6))
 
 
+_OPTION_LINE = re.compile(r"(?P<key>.*?)\s*[=:]")
+
+
+def _scan_lines(text):
+    """P&T #1527: what configparser does not tell us. Returns {(section, key): [line numbers]}
+    for every setting line, so a key written twice can be named. Indented lines are skipped
+    (configparser reads them as a continuation of the line above)."""
+    seen, section = {}, "usb-router"
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line[0] in " \t" or line.lstrip()[0] in "#;":
+            continue
+        if line.startswith("["):
+            section = line.strip().strip("[]").strip().lower()
+            continue
+        m = _OPTION_LINE.match(line)
+        if m and m.group("key").strip():
+            seen.setdefault((section, m.group("key").strip().lower()), []).append(n)
+    return seen
+
+
 def _read_conf(path):
     """C&G #254 v8.7: read usb-router.conf the way people actually save it on a laptop.
 
@@ -104,11 +129,17 @@ def _read_conf(path):
     interpolation=None: a '%' in a Wi-Fi password is just a character.
     A file with no [usb-router] header is read as if it had one.
     cp1252 fallback: an old Notepad 'ANSI' save with an accented character.
+    P&T #1527: strict=False, so a setting written twice is read (the LAST one wins) instead of
+    the whole file being dropped, and a line that is not a setting is skipped, not fatal.
+
+    Returns (parser or None, problems). Problems are plain sentences for the setup screen; they
+    name the setting and the line number, never a value (the file holds Wi-Fi passwords).
     """
+    name = os.path.basename(path)
     try:
         raw = open(path, "rb").read()
     except OSError:
-        return None
+        return None, [f"{name} could not be opened, so none of its settings are used."]
     for enc in ("utf-8-sig", "cp1252"):
         try:
             text = raw.decode(enc)
@@ -116,22 +147,40 @@ def _read_conf(path):
         except UnicodeDecodeError:
             continue
     else:
-        return None
-    for body in (text, "[usb-router]\n" + text):
-        parser = configparser.ConfigParser(interpolation=None)
+        return None, [f"{name} could not be read (unknown text encoding), so none of its settings are used."]
+    problems = []
+    for body, offset in ((text, 0), ("[usb-router]\n" + text, 1)):
+        parser = configparser.ConfigParser(interpolation=None, strict=False)
         try:
             parser.read_string(body, source=path)
-            return parser
         except configparser.MissingSectionHeaderError:
             continue
+        except configparser.ParsingError as e:
+            # the good lines are still in the parser; name the bad ones by number only
+            lines = ", ".join(str(n - offset) for n, _ in e.errors)
+            problems.append(f"{name}: line {lines} is not a setting (no = sign) and was skipped.")
         except configparser.Error:
-            return None
-    return None
+            return None, [f"{name} could not be read, so none of its settings are used."]
+        break
+    else:
+        return None, [f"{name} could not be read, so none of its settings are used."]
+    for (section, key), lines in _scan_lines(text).items():
+        if len(lines) > 1 and section == "usb-router":
+            where = ", ".join(str(n) for n in lines)
+            problems.append(f"{name}: {key} is set {len(lines)} times (lines {where}); "
+                            f"the last one, line {lines[-1]}, is used.")
+    section = parser["usb-router"] if parser.has_section("usb-router") else parser["DEFAULT"]
+    unknown = sorted(k for k in section if k not in DEFAULTS)
+    if unknown:
+        problems.append(f"{name}: not a setting the player knows, check the spelling: {', '.join(unknown)}.")
+    return parser, problems
 
 
 class Config:
     def __init__(self):
         self.values = dict(DEFAULTS)
+        self.problems = []        # P&T #1527: shown on the setup screen and the settings page
+        self.file_values = {}     # what usb-router.conf set, to tell when a saved setting beats it
         self._load_files()
         self._load_env()
         self.state_dir = Path(os.environ.get("USB_ROUTER_STATE_DIR", str(STATE_DIR)))
@@ -150,13 +199,15 @@ class Config:
         for path in paths:
             if not path or not os.path.exists(path):
                 continue
-            parser = _read_conf(path)
+            parser, problems = _read_conf(path)
+            self.problems += problems
             if parser is None:
                 continue
             section = parser["usb-router"] if parser.has_section("usb-router") else parser["DEFAULT"]
             for key in DEFAULTS:
                 if key in section:
                     self.values[key] = section[key]
+                    self.file_values[key] = section[key]
 
     def _load_env(self):
         for key in DEFAULTS:
@@ -175,12 +226,14 @@ class Config:
             self.values["hotspot_ssid"] = DEFAULTS["hotspot_ssid"]
 
     def _load_settings(self):
+        self.saved_keys = set()
         try:
             if self.settings_path.exists():
                 saved = json.loads(self.settings_path.read_text(encoding="utf-8"))
                 for key, value in saved.items():
                     if key in DEFAULTS:
                         self.values[key] = str(value)
+                        self.saved_keys.add(key)
         except (OSError, ValueError):
             pass
 
@@ -325,6 +378,17 @@ class Config:
         except (OSError, ValueError):
             pass  # read-only media: settings live for this session only
 
+    def conf_problems(self) -> list:
+        """P&T #1527: what is wrong with usb-router.conf, plus each setting in it that a Save on
+        this screen now overrides (C&G #254: the file said one homepage, the screen showed another)."""
+        out = list(self.problems)
+        for key in sorted(self.saved_keys):
+            if key in self.file_values and _unquote(self.file_values[key]) != _unquote(self.values[key]):
+                label = OVERRIDE_LABELS.get(key, key)
+                out.append(f"{label} was saved on this screen, so {key} in usb-router.conf is not used. "
+                           f"Change it here: editing the file will not change it.")
+        return out
+
     # -- accessors ---------------------------------------------------------
     def get(self, key: str) -> str:
         return self.values[key]
@@ -401,4 +465,5 @@ class Config:
             # read this cross-origin). The page does not DISPLAY it when the source is "default" (S&D #193).
             "admin_pin": self.admin_pin() if local else None,
             "admin_pin_source": self.admin_pin_source(),
+            "conf_problems": self.conf_problems(),
         }

@@ -293,3 +293,11 @@ body.setup-mode .join-line { font-size: clamp(1.1rem, 1.6vw, 1.5rem); max-width:
 }
 .setup-phone .dp-brand { display: none; }
 body.phone-setup .setup-phone .dp-brand { display: flex; margin-bottom: 1.75rem; }
+
+/* P&T #1527: usb-router.conf problems (amber: the player still runs, the file needs a look) */
+.conf-banner { display: block; border-color: var(--warn); }
+.conf-banner.hidden, .conf-line.hidden { display: none; }
+.conf-list { margin: 0.4em 0 0; padding-left: 1.2em; line-height: 1.45; overflow-wrap: anywhere; }
+.conf-line { margin-top: 1em; padding: 0.7em 0.9em; border-left: 4px solid var(--warn); border-radius: 6px;
+  background: rgba(242, 196, 107, 0.12); font-size: 1.05em; line-height: 1.35; overflow-wrap: anywhere; }
+body.setup-mode .conf-line { font-size: clamp(1.1rem, 1.6vw, 1.5rem); max-width: 40ch; }

@@ -55,6 +55,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 log = logging.getLogger("usb-router")
 
 cfg = Config()
+for _problem in cfg.conf_problems():   # P&T #1527: in the journal as well as on the screen
+    log.warning("%s", _problem)
 MOCK = cfg.flag("mock") or os.environ.get("USB_ROUTER_MOCK") == "1"
 nm = get_backend(MOCK, cfg.get("hotspot_backend"))
 captive = Captive(cfg.get("listen_port"))
