@@ -258,7 +258,20 @@ def api_status():
         "power": _state.get("power"),
         "backend": nm.name,
         "join": _join_for(nm.join_state()),
+        "lan_url": lan_url(uplink or {}),
     })
+
+
+def lan_url(uplink=None):
+    """C&G #254 v8.7: where a phone on the same network opens the settings page (None if not reachable)."""
+    if not cfg.flag("lan_access"):
+        return None
+    try:
+        up = uplink if uplink is not None else router.uplink()
+    except NetError:
+        return None
+    ip = (up or {}).get("ip")
+    return f"http://{ip}:{cfg.get('listen_port')}" if ip else None
 
 
 def _join_for(j):
@@ -475,12 +488,21 @@ def api_fleet_ping():
 @app.post("/api/setup-mode")
 def api_setup_mode():
     """
-    Re-open phone setup from the screen itself (Ctrl+N in the browser, or the
-    button on the local page). Loopback only: it needs someone at the screen.
-    The hotspot only actually starts while the screen is offline.
+    Re-open phone setup: from the screen itself (Ctrl+N, or the button on the local page),
+    or (C&G #254 v8.7, the Pi may have no working keyboard or mouse) from a phone with the
+    admin PIN. The hotspot only actually starts while the screen is offline.
     """
     if not _is_local():
-        abort(403)
+        return _setup_mode_pinned()
+    return _setup_mode()
+
+
+@admin_required
+def _setup_mode_pinned():
+    return _setup_mode()
+
+
+def _setup_mode():
     action = (body().get("action") or "open").strip()
     if action == "close":
         router.setup_until = 0.0
@@ -488,7 +510,7 @@ def api_setup_mode():
             router.stop(manual=False)
     else:
         router.open_setup_window()
-    return jsonify({"ok": True, "hotspot": router.status(run_check()["online"], local=True)})
+    return jsonify({"ok": True, "hotspot": router.status(run_check()["online"], local=_is_local())})
 
 
 @app.post("/api/pin/check")
@@ -532,8 +554,14 @@ def api_qr():
         if not _is_local():
             abort(403)
         data = router.status().get("ui_url") or f"http://10.42.0.1:{cfg.get('listen_port')}"
+    elif kind == "lan":
+        if not _is_local():
+            abort(403)
+        data = lan_url()
+        if not data:
+            return fail("not on a network yet", 404)
     else:
-        return fail("kind must be wifi or ui")
+        return fail("kind must be wifi, ui or lan")
     if qrcode is None:
         return fail("qrcode library not installed", 501)
     img = qrcode.make(data, box_size=8, border=2)
@@ -592,7 +620,20 @@ def api_browser_poll():
         "allow_exit": cfg.flag("allow_exit"),
         "reload_every": int(cfg.get("reload_every") or 0),
         "device_id": cfg.device_id(),
+        "hold": _join_hold(),
     })
+
+
+JOIN_ADDRESS_HOLD = 20   # seconds the screen shows "Connected" + the phone address after a join
+
+
+def _join_hold():
+    """C&G #254 v8.7: seconds left to keep the setup page up after a join that just worked."""
+    j = nm.join_state() or {}
+    left = int(JOIN_ADDRESS_HOLD - (time.time() - (j.get("at") or 0)))
+    if j.get("ok") is not True or left <= 0 or not lan_url():
+        return 0
+    return left
 
 
 # --------------------------------------------------------------------------

@@ -484,8 +484,12 @@ def test_setup_hotspot_only_when_unconfigured_or_requested(client):
     assert rt.is_configured() is True
     assert rt.desired(online=False) == "off"
     assert rt.tick(online=False) == "noop"
-    # Ctrl+N from the screen re-opens it (loopback only)
-    assert client.post("/api/setup-mode", json={"action": "open"}, environ_base={"REMOTE_ADDR": "10.42.0.2"}).status_code == 403
+    # Ctrl+N from the screen re-opens it; a phone needs the PIN (C&G #254 v8.7: no keyboard on the Pi)
+    assert client.post("/api/setup-mode", json={"action": "open"}, environ_base={"REMOTE_ADDR": "10.42.0.2"},
+                       no_pin=True).status_code == 401
+    assert client.post("/api/setup-mode", json={"action": "open"}, environ_base={"REMOTE_ADDR": "10.42.0.2"},
+                       headers={"X-Admin-Pin": "000000"}).status_code == 401
+    assert rt.setup_window_open() is False
     r = client.post("/api/setup-mode", json={"action": "open"}).get_json()
     assert r["hotspot"]["setup_window_until"]
     assert rt.desired(online=False) == "setup"

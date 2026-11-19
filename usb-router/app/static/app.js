@@ -122,8 +122,10 @@
   /* ---------------- admin PIN panel (screen only) ---------------- */
   const renderPin = (s) => {
     const box = $("pin-card");
-    if (!s.local) { box.classList.add("hidden"); return; }
+    // C&G #254 v8.7: a phone gets this card too, for the phone-setup window buttons only (CSS hides the PIN)
     box.classList.remove("hidden");
+    box.classList.toggle("remote", !s.local);
+    $("lan-hint").textContent = s.lan_url ? `From a phone on the same Wi-Fi: ${s.lan_url}` : "";
     const isDefault = s.settings.admin_pin_source === "default";   // the shared default PIN is never displayed
     $("pin-value").textContent = isDefault ? "Default PIN" : (s.settings.admin_pin || "");
     $("pin-source").textContent = { config: "set in usb-router.conf", new: "new PIN for this screen",
@@ -140,6 +142,12 @@
       : s.online ? "Phone setup is off while the screen is online."
       : h.configured ? "This screen already has Wi-Fi configured, so it does not broadcast for phone setup unless you allow it."
       : "Unconfigured and offline: the setup hotspot starts about 25 s after boot.";
+  };
+  $("phone-more").onclick = () => {
+    const on = document.body.classList.toggle("phone-more");
+    $("phone-more").setAttribute("aria-expanded", on ? "true" : "false");
+    $("phone-more").textContent = on ? "Fewer settings" : "More settings: content, rotation, sharing, power";
+    if (on) $("settings-card").scrollIntoView({ block: "start", behavior: "smooth" });
   };
   $("setup-open").onclick = async () => { try { await api("/api/setup-mode", { method: "POST", body: { action: "open" } }); toast("Phone setup allowed for 15 minutes", "ok"); } catch (e) { toast(e.message, "bad"); } refreshStatus(true); };
   $("setup-close").onclick = async () => { try { await api("/api/setup-mode", { method: "POST", body: { action: "close" } }); } catch (e) { toast(e.message, "bad"); } refreshStatus(true); };
@@ -241,6 +249,12 @@
     const sub = failed ? `${why[0].toUpperCase()}${why.slice(1)}. Opening setup again…`
       : running ? "" : "Opening your content…";
     $("join-sub").textContent = sub; $("join-sub").classList.toggle("hidden", !sub);
+    const lan = !running && !failed && s.lan_url;
+    $("join-lan").classList.toggle("hidden", !lan);
+    if (lan && $("join-lan-url").textContent !== s.lan_url) {
+      $("join-lan-url").textContent = s.lan_url; $("join-lan-ssid").textContent = j.ssid;
+      $("qr-lan").src = `/api/qr?kind=lan&t=${Date.now()}`;
+    }
     if (running && !joinFillTimer) {
       joinFillTimer = setInterval(() => {
         const now = parseFloat($("join-screen").style.getPropertyValue("--join-p")) || 10;

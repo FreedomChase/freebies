@@ -230,6 +230,9 @@ class Kiosk:
             return "navigated"
 
         if self.mode == "setup":
+            if online and home and int(data.get("hold") or 0) > 0:
+                # C&G #254 v8.7: a join just worked; the setup page shows the phone address for a moment
+                return "holding"
             if online and home:
                 self.homepage = home
                 self.show_content(home)

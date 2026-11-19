@@ -223,10 +223,25 @@ body.phone-setup .setup-phone strong { font-size: 1.5rem; letter-spacing: -0.04e
 
 /* C&G #209: Shut down. The power row is the one part of the settings card a phone sees after the PIN. */
 body.phone-setup .grid > #settings-card { display: block !important; }
-body.phone-setup #settings-card > :not(.actions) { display: none !important; }
-body.phone-setup #settings-card .actions { margin-top: 0; padding-top: 0; border-top: 0; }
-body.phone-setup #settings-card .actions [data-action="reload"],
-body.phone-setup #settings-card .actions [data-action="restart-browser"] { display: none; }
+body.phone-setup:not(.phone-more) #settings-card > :not(.actions) { display: none !important; }
+body.phone-setup:not(.phone-more) #settings-card .actions { margin-top: 0; padding-top: 0; border-top: 0; }
+body.phone-setup:not(.phone-more) #settings-card .actions [data-action="reload"],
+body.phone-setup:not(.phone-more) #settings-card .actions [data-action="restart-browser"] { display: none; }
+/* C&G #254 v8.7: the Pi may have no working keyboard or mouse, so every setting is one tap away on
+   the phone: "More settings" under the Wi-Fi list shows the rest (content, rotation, sharing, power).
+   The first view stays the clean Wi-Fi list (Shaun, 17 Nov). */
+.phone-more-btn { display: none; }
+body.phone-setup .phone-more-btn { display: block; width: 100%; margin-top: 16px; }
+body.phone-setup.phone-more .grid > #hotspot-card,
+body.phone-setup.phone-more .grid > #devices-card,
+body.phone-setup.phone-more .grid > #pin-card:not(.hidden) { display: block !important; }
+/* the PIN card on a phone: only the phone-setup window buttons; the PIN and new-secret buttons stay on the screen */
+#pin-card.remote #pin-value, #pin-card.remote #pin-source, #pin-card.remote #pin-hint,
+#pin-card.remote [data-rotate] { display: none; }
+.join-lan { margin-top: 2.2em; display: flex; gap: 1.2em; align-items: center; justify-content: center; text-align: left; }
+.join-lan img { width: 132px; height: 132px; background: #fff; padding: 8px; border-radius: 8px; }
+.join-lan p { margin: 0; max-width: 30ch; font-size: 1.05rem; color: rgba(245,242,236,.85); }
+.join-lan strong { display: block; font-family: ui-monospace, monospace; color: var(--paper); margin-top: .3em; }
 .power-off { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 18px; padding: 24px; text-align: center; background: var(--bg); color: var(--paper); }
 .power-off.hidden { display: none; }

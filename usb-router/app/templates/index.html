@@ -22,6 +22,9 @@
   <p class="boot-text" id="join-text"></p>
   <p class="join-sub hidden" id="join-sub"></p>
   <div class="boot-bar"><i></i></div>
+  <!-- C&G #254 v8.7: after a join, where a phone on the same Wi-Fi changes the settings later -->
+  <div class="join-lan hidden" id="join-lan"><img id="qr-lan" alt="QR code for the settings page" width="132" height="132">
+    <p>To change settings later, join a phone to <span id="join-lan-ssid"></span> and scan this, or open <strong id="join-lan-url"></strong></p></div>
 </div></div>
 {% endif %}
 
@@ -140,6 +143,7 @@
         </div>
         <p id="wifi-error" class="error" role="alert"></p>
       </form>
+      <button type="button" id="phone-more" class="btn btn-ghost phone-more-btn" aria-expanded="false">More settings: content, rotation, sharing, power</button>
 
       <details class="hidden-ssid">
         <summary>Join a hidden network</summary>
@@ -230,6 +234,7 @@
         <button class="btn btn-danger" data-action="reboot">Reboot screen</button>
         <button class="btn btn-danger" data-action="shutdown">Shut down</button>
       </div>
+      <p class="hint" id="lan-hint"></p>
       <p class="hint">Tip: these can also be set in <code>usb-router.conf</code> on the stick's <code>USBROUTER</code> drive, or remotely from the fleet dashboard.</p>
     </section>
 

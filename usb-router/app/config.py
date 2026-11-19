@@ -97,6 +97,38 @@ def generate_pin() -> str:
     return "".join(secrets.choice(string.digits) for _ in range(6))
 
 
+def _read_conf(path):
+    """C&G #254 v8.7: read usb-router.conf the way people actually save it on a laptop.
+
+    utf-8-sig: Windows Notepad may write a BOM, which made the whole file unreadable.
+    interpolation=None: a '%' in a Wi-Fi password is just a character.
+    A file with no [usb-router] header is read as if it had one.
+    cp1252 fallback: an old Notepad 'ANSI' save with an accented character.
+    """
+    try:
+        raw = open(path, "rb").read()
+    except OSError:
+        return None
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        return None
+    for body in (text, "[usb-router]\n" + text):
+        parser = configparser.ConfigParser(interpolation=None)
+        try:
+            parser.read_string(body, source=path)
+            return parser
+        except configparser.MissingSectionHeaderError:
+            continue
+        except configparser.Error:
+            return None
+    return None
+
+
 class Config:
     def __init__(self):
         self.values = dict(DEFAULTS)
@@ -118,10 +150,8 @@ class Config:
         for path in paths:
             if not path or not os.path.exists(path):
                 continue
-            parser = configparser.ConfigParser()
-            try:
-                parser.read(path, encoding="utf-8")
-            except configparser.Error:
+            parser = _read_conf(path)
+            if parser is None:
                 continue
             section = parser["usb-router"] if parser.has_section("usb-router") else parser["DEFAULT"]
             for key in DEFAULTS:
