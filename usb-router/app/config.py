@@ -102,24 +102,44 @@ def generate_pin() -> str:
     return "".join(secrets.choice(string.digits) for _ in range(6))
 
 
-_OPTION_LINE = re.compile(r"(?P<key>.*?)\s*[=:]")
+_OPTION_LINE = re.compile(r"(?P<key>.*?)\s*(?P<vi>[=:])\s*(?P<value>.*)$")
 
 
 def _scan_lines(text):
-    """P&T #1527: what configparser does not tell us. Returns {(section, key): [line numbers]}
-    for every setting line, so a key written twice can be named. Indented lines are skipped
-    (configparser reads them as a continuation of the line above)."""
-    seen, section = {}, "usb-router"
+    """P&T #1527/#1528: what configparser does not tell us, line by line, read the way it reads
+    them. Returns a list of (line number, section, key, kind) for every setting line, kind:
+      "set"      key = value
+      "url"      a web address alone on a line ("https://..." parses as a key called https)
+      "joined"   an indented line, which configparser adds to the value of the setting above;
+                 key is that setting and the line number is the indented one
+    Lines with no = or : are not listed (configparser reports those itself)."""
+    out, section, current = [], "usb-router", None
     for n, line in enumerate(text.splitlines(), 1):
-        if not line.strip() or line[0] in " \t" or line.lstrip()[0] in "#;":
+        stripped = line.strip()
+        if not stripped or stripped[0] in "#;":
+            continue                                    # blank and comment lines keep a value open
+        if line[0] in " \t" and current is not None:
+            out.append((n, section, current, "joined"))
             continue
-        if line.startswith("["):
-            section = line.strip().strip("[]").strip().lower()
+        current = None
+        if stripped.startswith("["):
+            section = stripped.strip("[]").strip().lower()
             continue
-        m = _OPTION_LINE.match(line)
-        if m and m.group("key").strip():
-            seen.setdefault((section, m.group("key").strip().lower()), []).append(n)
-    return seen
+        m = _OPTION_LINE.match(stripped)
+        if not m or not m.group("key").strip():
+            continue
+        key = m.group("key").strip().lower()
+        if key in ("http", "https") and m.group("vi") == ":" and m.group("value").startswith("//"):
+            out.append((n, section, key, "url"))
+        else:
+            out.append((n, section, key, "set"))
+        current = key
+    return out
+
+
+def _lines(numbers):
+    numbers = list(numbers)
+    return ("line " if len(numbers) == 1 else "lines ") + ", ".join(str(n) for n in numbers)
 
 
 def _read_conf(path):
@@ -132,14 +152,17 @@ def _read_conf(path):
     P&T #1527: strict=False, so a setting written twice is read (the LAST one wins) instead of
     the whole file being dropped, and a line that is not a setting is skipped, not fatal.
 
-    Returns (parser or None, problems). Problems are plain sentences for the setup screen; they
-    name the setting and the line number, never a value (the file holds Wi-Fi passwords).
+    Returns (parser or None, problems). Problems are plain sentences for the setup screen,
+    most important first (the TV shows only the first). P&T #1528: they name a line by its
+    number and a setting only when it is one the player knows; nothing else typed in the file
+    is ever repeated, because the file holds Wi-Fi passwords and a password pasted on the
+    wrong line would otherwise be shown on the TV.
     """
     name = os.path.basename(path)
     try:
         raw = open(path, "rb").read()
     except OSError:
-        return None, [f"{name} could not be opened, so none of its settings are used."]
+        return None, [(0, f"{name} could not be opened, so none of its settings are used.")]
     for enc in ("utf-8-sig", "cp1252"):
         try:
             text = raw.decode(enc)
@@ -147,8 +170,8 @@ def _read_conf(path):
         except UnicodeDecodeError:
             continue
     else:
-        return None, [f"{name} could not be read (unknown text encoding), so none of its settings are used."]
-    problems = []
+        return None, [(0, f"{name} could not be read (unknown text encoding), so none of its settings are used.")]
+    bad_lines = []
     for body, offset in ((text, 0), ("[usb-router]\n" + text, 1)):
         parser = configparser.ConfigParser(interpolation=None, strict=False)
         try:
@@ -156,24 +179,43 @@ def _read_conf(path):
         except configparser.MissingSectionHeaderError:
             continue
         except configparser.ParsingError as e:
-            # the good lines are still in the parser; name the bad ones by number only
-            lines = ", ".join(str(n - offset) for n, _ in e.errors)
-            problems.append(f"{name}: line {lines} is not a setting (no = sign) and was skipped.")
+            bad_lines = [n - offset for n, _ in e.errors]   # the good lines are still in the parser
         except configparser.Error:
-            return None, [f"{name} could not be read, so none of its settings are used."]
+            return None, [(0, f"{name} could not be read, so none of its settings are used.")]
         break
     else:
-        return None, [f"{name} could not be read, so none of its settings are used."]
-    for (section, key), lines in _scan_lines(text).items():
-        if len(lines) > 1 and section == "usb-router":
-            where = ", ".join(str(n) for n in lines)
-            problems.append(f"{name}: {key} is set {len(lines)} times (lines {where}); "
-                            f"the last one, line {lines[-1]}, is used.")
-    section = parser["usb-router"] if parser.has_section("usb-router") else parser["DEFAULT"]
-    unknown = sorted(k for k in section if k not in DEFAULTS)
+        return None, [(0, f"{name} could not be read, so none of its settings are used.")]
+
+    scan = [entry for entry in _scan_lines(text) if entry[1] == "usb-router"]
+    ranked = []   # (rank, first line, sentence): rank 0 changes a setting the player uses
+    by_key = {}
+    for n, _, key, kind in scan:
+        if kind == "set" and key in DEFAULTS:
+            by_key.setdefault(key, []).append(n)
+    for key, lines in by_key.items():
+        if len(lines) > 1:
+            ranked.append((0, lines[0], f"{name}: {key} is set {len(lines)} times ({_lines(lines)}); "
+                                        f"the last one, line {lines[-1]}, is used."))
+    joined = {}
+    for n, _, key, kind in scan:
+        if kind == "joined" and key in DEFAULTS:
+            joined.setdefault(key, []).append(n)
+    for key, lines in joined.items():
+        one = len(lines) == 1
+        ranked.append((1, lines[0], f"{name}, {_lines(lines)}: {'starts' if one else 'start'} with a space, "
+                                    f"so {'it is' if one else 'they are'} added to {key} above it and {key} "
+                                    f"is wrong. Remove the space at the start."))
+    urls = [n for n, _, _, kind in scan if kind == "url"]
+    if urls:
+        ranked.append((2, urls[0], f"{name}, {_lines(urls)}: a web address on its own, not a setting, so it "
+                                   f"is ignored. To show it, write homepage = in front of it."))
+    if bad_lines:
+        ranked.append((2, bad_lines[0], f"{name}, {_lines(bad_lines)}: not a setting (no = sign), so it was skipped."))
+    unknown = sorted({n for n, _, key, kind in scan if kind == "set" and key not in DEFAULTS})
     if unknown:
-        problems.append(f"{name}: not a setting the player knows, check the spelling: {', '.join(unknown)}.")
-    return parser, problems
+        ranked.append((3, unknown[0], f"{name}, {_lines(unknown)}: not a setting the player knows, so it "
+                                      f"is ignored. Check the spelling of the name before the = sign."))
+    return parser, [(rank, sentence) for rank, _, sentence in sorted(ranked)]
 
 
 class Config:
@@ -381,13 +423,13 @@ class Config:
     def conf_problems(self) -> list:
         """P&T #1527: what is wrong with usb-router.conf, plus each setting in it that a Save on
         this screen now overrides (C&G #254: the file said one homepage, the screen showed another)."""
-        out = list(self.problems)
+        ranked = list(self.problems)   # (rank, sentence); the TV shows only the first (P&T #1528)
         for key in sorted(self.saved_keys):
             if key in self.file_values and _unquote(self.file_values[key]) != _unquote(self.values[key]):
                 label = OVERRIDE_LABELS.get(key, key)
-                out.append(f"{label} was saved on this screen, so {key} in usb-router.conf is not used. "
-                           f"Change it here: editing the file will not change it.")
-        return out
+                ranked.append((0.5, f"{label} was saved on this screen, so {key} in usb-router.conf is not "
+                                    f"used. Change it here: editing the file will not change it."))
+        return [sentence for _, sentence in sorted(ranked, key=lambda r: r[0])]
 
     # -- accessors ---------------------------------------------------------
     def get(self, key: str) -> str:
