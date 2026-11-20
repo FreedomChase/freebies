@@ -216,6 +216,7 @@
     renderJoin(s, show);
     renderConf(s, show);
     renderConfWifi(s);
+    renderHealth(s);
     $("setup-diag").textContent = s.local ? [fmtDiag(h.diag), fmtJoin(s.join)].filter(Boolean).join(" · ") : "";
     // the clean screen hides it; it comes back when a phone was refused, or with the D key
     $("setup-diag").classList.toggle("show", s.local && (diagKey || !!(h.diag && h.diag.refused)));
@@ -240,6 +241,17 @@
     line.innerHTML = list.map((w) => w.ssid
       ? `<strong>From usb-router.conf:</strong> ${esc(w.ssid)}: ${esc(w.words)}`
       : `<strong>From usb-router.conf:</strong> ${esc(w.words)}`).join("<br>");
+  };
+  /* C&G #270: time on, start count and power, so a reboot loop or a weak charger proves itself on :8080.
+     A phone always sees it; the screen's own setup card shows it only when something is wrong. */
+  const renderHealth = (s) => {
+    const h = s.health, line = $("health-line"), card = $("setup-health");
+    const words = h && h.words ? h.words : "";
+    line.textContent = words;
+    line.classList.toggle("warn", !!(h && h.warn));
+    line.classList.toggle("hidden", !words || s.local);
+    card.textContent = words;
+    card.classList.toggle("hidden", !words || !s.local || !(h && h.warn));
   };
   /* ---------------- venue join on the screen (C&G #209 v8.3) ----------------
      The phone drops off when the hotspot stops, so the screen is where the join is seen:

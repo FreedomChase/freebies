@@ -40,6 +40,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask, abort, jsonify, render_template, request, send_file  # noqa: E402
 
+import health  # noqa: E402
 from captive import Captive  # noqa: E402
 from config import Config  # noqa: E402
 from fleet_client import FleetClient  # noqa: E402
@@ -122,6 +123,52 @@ def conf_wifi(devices, max_age=20):
     value = conf_wifi_report(ssids, nets, connected, reason)
     _conf_wifi_cache.update(at=now, value=value)
     return value
+
+
+# C&G #270: uptime, boot count and the firmware's power bits, so a reboot loop proves itself on :8080
+STATE_DIR = os.environ.get("USB_ROUTER_STATE_DIR", "/var/lib/usb-router")
+_health = {"rec": {"count": None, "app_starts": None, "uv_boot": None, "saved": False},
+           "started": time.time(), "browser_starts": None, "at": 0.0, "value": None}
+_health_lock = threading.Lock()
+
+
+def health_start():
+    """Once per app start (main): count this boot, or this app restart within the same boot."""
+    rec = health.record_start(STATE_DIR)
+    with _health_lock:
+        _health["rec"] = rec
+    log.info("boot %s, app start %s this boot%s", rec.get("count"), rec.get("app_starts"),
+             "" if rec.get("saved") else " (count not saved)")
+
+
+def health_now(max_age=10):
+    """The health report, cached max_age s; notes an under-voltage boot in the state file."""
+    now = time.time()
+    with _health_lock:
+        if _health["value"] is not None and now - _health["at"] < max_age:
+            return _health["value"]
+    power = health.read_power()
+    with _health_lock:
+        if power.get("under_voltage_now") or power.get("under_voltage_since_boot"):
+            if _health["rec"].get("count") and _health["rec"].get("uv_boot") != _health["rec"].get("count"):
+                log.warning("under-voltage seen on boot %s (%s)", _health["rec"]["count"], power.get("raw"))
+                _health["rec"] = health.note_under_voltage(STATE_DIR, _health["rec"])
+        value = health.report(_health["rec"], power, health.system_uptime(), _health["started"],
+                              now=now, browser_starts=_health["browser_starts"])
+        _health.update(at=now, value=value)
+    return value
+
+
+def health_watch(every=30):
+    """A brown-out can come while nobody has :8080 open: read the power bits on a timer as well."""
+    def loop():
+        while True:
+            try:
+                health_now(max_age=0)
+            except Exception:   # never let the watcher take the app down
+                log.exception("health check failed")
+            time.sleep(every)
+    threading.Thread(target=loop, name="health", daemon=True).start()
 
 
 def run_check(force=False):
@@ -293,6 +340,7 @@ def api_status():
         "backend": nm.name,
         "join": _join_for(nm.join_state()),
         "conf_wifi": conf_wifi(devices),
+        "health": health_now(),
         "lan_url": lan_url(uplink or {}),
     })
 
@@ -625,13 +673,22 @@ def api_browser_go():
 def api_browser_report():
     if not _is_local():
         abort(403)
+    b = body()
     with _state_lock:
-        b = body()
-        if not b.get("check"):          # a failed check reports the URL it tried, not one being shown
-            _state["current_url"] = (b.get("url") or "")[:2000] or None
-        # C&G #270: the kiosk's content check, for the phone page ("" = it passed)
-        _state["content_check"] = {"failed": str(b.get("check") or "")[:120], "fails": int(b.get("fails") or 0),
-                                   "at": int(time.time())} if b.get("check") else None
+        if not b.get("restart"):        # C&G #270: a restart report carries only the cog start count
+            if not b.get("check"):      # a failed check reports the URL it tried, not one being shown
+                _state["current_url"] = (b.get("url") or "")[:2000] or None
+            # C&G #270: the kiosk's content check, for the phone page ("" = it passed)
+            _state["content_check"] = {"failed": str(b.get("check") or "")[:120], "fails": int(b.get("fails") or 0),
+                                       "at": int(time.time())} if b.get("check") else None
+    try:                                # C&G #270: how many times the kiosk has started cog this boot
+        starts = int(b["starts"]) if "starts" in b else None
+    except (TypeError, ValueError):
+        starts = None
+    if starts is not None and 0 < starts < 10 ** 6:
+        with _health_lock:
+            _health["browser_starts"] = starts
+            _health["value"] = None
     return jsonify({"ok": True})
 
 
@@ -682,6 +739,8 @@ def main():
     if cfg.flag("lan_access"):
         host = "0.0.0.0"
     port = int(cfg.get("listen_port"))
+    health_start()
+    health_watch()
     provision_wifi()
     if cfg.flag("lan_access") and cfg.flag("captive_portal") and not MOCK:
         captive.start_listener()

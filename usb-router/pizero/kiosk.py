@@ -112,6 +112,7 @@ class Cog:
         self.mem_limit = mem_limit
         self.extra = list(extra or [])
         self.proc = None
+        self.starts = 0               # C&G #270: cog starts this boot, shown on :8080 as "browser restarted Nx"
 
     def command(self, url):
         cmd = [self.cog, f"--platform={self.platform}", "--bg-color=#052444",
@@ -124,6 +125,7 @@ class Cog:
         self.stop()
         log.info("starting cog: %s", " ".join(self.command(url)))
         self.proc = subprocess.Popen(self.command(url))
+        self.starts += 1
 
     def alive(self):
         return self.proc is not None and self.proc.poll() is None
@@ -176,6 +178,19 @@ class Kiosk:
         self.online_since = None      # C&G #270: when the setup page first saw the network up
 
     # -- helpers -----------------------------------------------------------
+    def _starts(self, data):
+        """C&G #270: add the cog start count to a report (a fake browser in tests may not count)."""
+        n = getattr(self.b, "starts", None)
+        if isinstance(n, int) and n > 0:
+            data["starts"] = n
+        return data
+
+    def _report_starts(self):
+        """After cog died and was restarted: tell :8080, without changing what it says is showing."""
+        data = self._starts({"url": self.showing, "check": "", "restart": True})
+        if "starts" in data:
+            self.fetch(self.connect + "/api/browser/report", data=data)
+
     def setup_url(self):
         return self.connect + "/"
 
@@ -216,14 +231,14 @@ class Kiosk:
             self.retry_at = None
             self.next_probe = now + PROBE_EVERY
             self._open(url)
-            self.fetch(self.connect + "/api/browser/report", data={"url": url})
+            self.fetch(self.connect + "/api/browser/report", data=self._starts({"url": url}))
             if self.reload_every:
                 self.next_reload = now + self.reload_every * 60
             return True
         self.fails += 1
         delay = min(60, 5 * 2 ** min(self.fails - 1, 4))
         self.fetch(self.connect + "/api/browser/report",
-                   data={"url": url, "check": LAST_CHECK.get("why") or "no answer", "fails": self.fails})
+                   data=self._starts({"url": url, "check": LAST_CHECK.get("why") or "no answer", "fails": self.fails}))
         self.mode = "unavailable"
         self.retry_at = now + delay
         self._open(self.unavailable_url(url, delay))
@@ -236,6 +251,7 @@ class Kiosk:
             # cog died or exited: bring back whatever should be showing
             url = self.showing or self.setup_url()
             self.b.start(url)
+            self._report_starts()
             return "restarted-browser"
 
         data = self.fetch(self.connect + "/api/browser/poll")

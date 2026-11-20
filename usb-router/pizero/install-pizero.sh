@@ -37,7 +37,8 @@ echo "==> users"
 # kiosk runs the connection manager: drives NetworkManager (netdev) and holds the PIN and passwords
 id kiosk >/dev/null 2>&1 || useradd -m -s /bin/bash kiosk
 # systemd-journal: the screen's "Wi-Fi check" line reads join events from the journal (S&D #193)
-for g in netdev plugdev systemd-journal; do
+# video: /dev/vchiq for `vcgencmd get_throttled`, the power check on :8080 (C&G #270)
+for g in netdev plugdev systemd-journal video; do
   getent group "$g" >/dev/null && usermod -aG "$g" kiosk
 done
 # signage runs cog, which shows third-party web pages: the screen and input only.

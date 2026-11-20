@@ -301,3 +301,7 @@ body.phone-setup .setup-phone .dp-brand { display: flex; margin-bottom: 1.75rem;
 .conf-line { margin-top: 1em; padding: 0.7em 0.9em; border-left: 4px solid var(--warn); border-radius: 6px;
   background: rgba(242, 196, 107, 0.12); font-size: 1.05em; line-height: 1.35; overflow-wrap: anywhere; }
 body.setup-mode .conf-line { font-size: clamp(1.1rem, 1.6vw, 1.5rem); max-width: 40ch; }
+/* C&G #270: time on, start count and power on :8080 */
+.health-line { margin: 0 0 16px; padding: 0.55em 0.9em; border-left: 4px solid var(--line); border-radius: 6px;
+  color: var(--muted); font-size: 0.95rem; line-height: 1.4; overflow-wrap: anywhere; }
+.health-line.warn { border-left-color: var(--warn); background: rgba(242, 196, 107, 0.12); color: var(--text); }
