@@ -216,8 +216,10 @@ def test_first_check_waits_for_the_network_clock_then_goes_ahead():
     assert k.step() == "waiting-clock" and w.checks == 0
     w.t = K.CLOCK_WAIT - 1
     assert k.step() == "waiting-clock" and w.checks == 0
-    w.t = K.CLOCK_WAIT                                   # bounded: never waits past CLOCK_WAIT
-    assert k.step() == "left-setup" and w.checks == 1
+    w.t = K.CLOCK_WAIT                                   # C&G #273: no cutoff, the screen says it waits
+    assert k.step() == "showing-clock-wait" and w.checks == 0
+    synced["v"] = True
+    assert k.step() == "left-clock-wait" and w.checks == 1
 
 
 def test_a_synced_clock_does_not_wait_and_a_failure_is_reported_with_its_reason():

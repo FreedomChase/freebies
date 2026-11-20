@@ -24,7 +24,14 @@ What it does:
     /static/unavailable.html with the URL and the screen ID, and retries with
     backoff (5, 10, 20, 40, 60 s); when the network comes back it reloads;
   * reload_every minutes: scheduled reload; action "restart": cog is restarted;
-  * cog crashing or exiting is restarted.
+  * cog crashing or exiting is restarted; C&G #273: cog runs with
+    --webprocess-failure=exit so a crashed page ends cog where this loop sees it,
+    and a page that stops the browser CRASH_LIMIT times in CRASH_WINDOW s is not
+    reopened in a loop: the screen says so in plain words and tries again after
+    CRASH_BACKOFF s. A page's own error that does not crash the browser (a
+    "needs WebGL" notice) is never restarted: this loop cannot see it and does not try;
+  * C&G #273: no content check before the network clock is set (no cutoff); after
+    CLOCK_WAIT s the screen says it is waiting for the network clock.
 
 Standard library only. Run as the kiosk user from usb-router-kiosk.service.
 """
@@ -47,7 +54,10 @@ DEFAULT_CONNECT_URL = os.environ.get("USB_ROUTER_CONNECT_URL", "http://127.0.0.1
 PROBE_EVERY = 30          # seconds between content checks while it is showing
 POLL_SETUP = 2            # seconds between polls on the setup page
 POLL_CONTENT = 4          # seconds between polls once content shows
-CLOCK_WAIT = 90           # C&G #270: seconds to wait for the network clock before the first content check
+CLOCK_WAIT = 90           # C&G #270/#273: seconds on the setup page before the screen says it waits for the clock
+CRASH_LIMIT = 3           # C&G #273: page crashes of the browser ...
+CRASH_WINDOW = 300        # ... within this many seconds stop the restart loop
+CRASH_BACKOFF = 600       # seconds before a crashing page is tried again
 TIMESYNC_FLAG = "/run/systemd/timesync/synchronized"
 LAST_CHECK = {"ok": None, "why": ""}   # the last content check, in plain words, for the phone page
 
@@ -116,7 +126,7 @@ class Cog:
 
     def command(self, url):
         cmd = [self.cog, f"--platform={self.platform}", "--bg-color=#052444",
-               "--webprocess-failure=restart"]
+               "--webprocess-failure=exit"]     # C&G #273: a crash ends cog, so step() can count it
         if self.mem_limit:
             cmd.append(f"--web-mem-limit={int(self.mem_limit)}")
         return cmd + self.extra + [url]
@@ -176,6 +186,7 @@ class Kiosk:
         self.control_failures = 0     # cogctl calls that failed and forced a cog restart
         self.synced = synced
         self.online_since = None      # C&G #270: when the setup page first saw the network up
+        self.crashes = []             # C&G #273: when cog died while showing content (clock times)
 
     # -- helpers -----------------------------------------------------------
     def _starts(self, data):
@@ -194,9 +205,28 @@ class Kiosk:
     def setup_url(self):
         return self.connect + "/"
 
-    def unavailable_url(self, url, delay):
-        q = urllib.parse.urlencode({"u": url, "s": self.device_id or "", "r": delay})
-        return f"{self.connect}/static/unavailable.html?{q}"
+    def unavailable_url(self, url, delay, title=None, why=None):
+        """delay None: no countdown ("Waiting"). title/why (C&G #273): a plain-words heading and reason."""
+        q = {"u": url, "s": self.device_id or ""}
+        if delay is not None:
+            q["r"] = delay
+        if title:
+            q["t"] = title
+        if why:
+            q["w"] = why
+        return f"{self.connect}/static/unavailable.html?{urllib.parse.urlencode(q)}"
+
+    def clock_url(self, url):
+        return self.unavailable_url(url, None, title="Waiting for the network clock", why=(
+            "This screen has no clock battery, and secure sites do not open with a wrong clock. "
+            "It opens the page as soon as internet time (NTP) answers. If this stays for minutes, "
+            "the network may block internet time (UDP port 123)."))
+
+    def crash_url(self, url, n):
+        mins = max(1, CRASH_WINDOW // 60)
+        return self.unavailable_url(url, CRASH_BACKOFF, title="This page keeps stopping the browser", why=(
+            f"It stopped the browser {n} times in {mins} minutes. It may need WebGL or more memory "
+            f"than this screen has. Tap Show content on the phone page to open it anyway."))
 
     def _open(self, url):
         self.showing = url
@@ -248,6 +278,22 @@ class Kiosk:
     def step(self):
         """Poll the connection manager once and act. Returns a short label (for tests/logging)."""
         if not self.b.alive():
+            now = self.clock()
+            if self.mode == "content" and self.homepage and self.showing == self.homepage:
+                # C&G #273: the content page crashed the browser; count it, and stop a restart loop
+                self.crashes = [t for t in self.crashes if now - t < CRASH_WINDOW] + [now]
+                if len(self.crashes) >= CRASH_LIMIT:
+                    n, self.crashes = len(self.crashes), []
+                    log.warning("%s stopped the browser %d times in %d s; trying again in %d s",
+                                self.homepage, n, CRASH_WINDOW, CRASH_BACKOFF)
+                    self.mode = "unavailable"
+                    self.retry_at = now + CRASH_BACKOFF
+                    self.showing = self.crash_url(self.homepage, n)
+                    self.b.start(self.showing)
+                    self.fetch(self.connect + "/api/browser/report", data=self._starts(
+                        {"url": self.homepage, "fails": n,
+                         "check": f"the page stopped the browser {n} times in {max(1, CRASH_WINDOW // 60)} min, it may need WebGL"}))
+                    return "page-crashing"
             # cog died or exited: bring back whatever should be showing
             url = self.showing or self.setup_url()
             self.b.start(url)
@@ -285,15 +331,35 @@ class Kiosk:
                 # C&G #254 v8.7: a join just worked; the setup page shows the phone address for a moment
                 return "holding"
             if online and home:
-                # C&G #270: give the network clock up to CLOCK_WAIT s first, so a fresh flash does not
-                # start on "Content unavailable" just because its clock is behind
+                # C&G #270/#273: no content check before the network clock is set (a wrong clock fails TLS
+                # and a site's bot check); after CLOCK_WAIT s on the setup page the screen says why it waits
                 self.online_since = self.online_since if self.online_since is not None else now
-                if not self.synced() and now - self.online_since < CLOCK_WAIT:
+                if not self.synced():
+                    if now - self.online_since >= CLOCK_WAIT:
+                        self.mode = "clock"
+                        self.homepage = home
+                        self._open(self.clock_url(home))
+                        return "showing-clock-wait"
                     return "waiting-clock"
                 self.homepage = home
                 self.show_content(home)
                 return "left-setup"
             return "setup"
+
+        if self.mode == "clock":
+            # C&G #273: waiting for internet time, however long it takes
+            if not online:
+                self.mode, self.online_since = "setup", None
+                self._open(self.setup_url())
+                return "setup"
+            if not self.synced():
+                if home and home != self.homepage:
+                    self.homepage = home
+                    self._open(self.clock_url(home))
+                return "waiting-clock"
+            self.homepage = home or self.homepage
+            self.show_content(self.homepage)
+            return "left-clock-wait"
 
         if home and home != self.homepage:
             # changed from the settings page or the fleet dashboard
@@ -326,7 +392,7 @@ class Kiosk:
         return "ok"
 
     def interval(self):
-        return POLL_SETUP if self.mode == "setup" else POLL_CONTENT
+        return POLL_SETUP if self.mode in ("setup", "clock") else POLL_CONTENT
 
 
 def wait_for_manager(connect, seconds=60):

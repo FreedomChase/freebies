@@ -210,7 +210,7 @@ def test_cog_command_line():
     cmd = c.command(HOME)
     assert cmd[0].endswith("cog") and cmd[-1] == HOME
     assert "--platform=drm" in cmd and "--web-mem-limit=200" in cmd
-    assert "--webprocess-failure=restart" in cmd
+    assert "--webprocess-failure=exit" in cmd        # C&G #273: a crash ends cog, so the kiosk counts it
     assert not any("ignore-tls" in a for a in cmd)   # never bypass certificate errors
 
 

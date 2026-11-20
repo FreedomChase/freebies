@@ -10,7 +10,8 @@
 <!-- Shown by the Pi Zero kiosk (pizero/kiosk.py) when the content URL does not answer.
      The kiosk itself retries and navigates away; this page only says so. -->
 <div class="unavail-box">
-  <h1 class="unavail-title">Content unavailable</h1>
+  <h1 class="unavail-title" id="t">Content unavailable</h1>
+  <p class="unavail-why hidden" id="w"></p>
   <p class="unavail-url" id="u"></p>
   <p class="unavail-detail"><span id="r"></span> &middot; screen <span id="s"></span></p>
 </div>

@@ -150,6 +150,7 @@ body.unavail { color: var(--paper); align-items: center; justify-content: center
 .unavail-box { padding: 24px; max-width: 90vw; }
 .unavail-title { font-size: 2rem; font-weight: 600; margin-bottom: 0.75rem; }
 .unavail-url, .unavail-detail { color: var(--muted); font-size: 1.1rem; word-break: break-all; }
+.unavail-why { font-size: 1.3rem; line-height: 1.45; margin-bottom: 1rem; }   /* C&G #273: the plain-words reason */
 
 /* PIN gate: on a phone the PIN comes before anything else (S&D #193) */
 body.pin-locked main > :not(#pin-gate) { display: none !important; }
