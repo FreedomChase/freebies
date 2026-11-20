@@ -43,7 +43,7 @@ from flask import Flask, abort, jsonify, render_template, request, send_file  # 
 from captive import Captive  # noqa: E402
 from config import Config  # noqa: E402
 from fleet_client import FleetClient  # noqa: E402
-from netman import NetError, get_backend, internet_check  # noqa: E402
+from netman import NetError, conf_wifi_report, get_backend, internet_check, nm_reason  # noqa: E402
 from router import Router  # noqa: E402
 
 try:
@@ -92,6 +92,36 @@ def provision_wifi():
         _state["provisioned"] = created
     if created:
         log.info("provisioned Wi-Fi profiles: %s", ", ".join(created))
+
+
+_conf_wifi_cache = {"at": 0.0, "value": None}
+
+
+def conf_wifi(devices, max_age=20):
+    """C&G #270: the state of each usb-router.conf Wi-Fi name for the setup screen (read? seen? why not
+    joined?). Cached for max_age s: the scan is the last one taken (no rescan) and the reason costs a
+    journal read, which the Pi Zero should not do on every 2 s poll."""
+    now = time.time()
+    if _conf_wifi_cache["value"] is not None and now - _conf_wifi_cache["at"] < max_age:
+        return _conf_wifi_cache["value"]
+    ssids = [s for s, _ in cfg.provisioned_wifi()]
+    nets, reason = None, None
+    if ssids:
+        try:
+            nets = nm.wifi_scan(rescan=False)
+        except NetError:
+            nets = None
+        wifi = [d for d in devices if d.get("type") == "wifi"]
+        j = nm.join_state() or {}
+        if wifi and not MOCK and (not j.get("ssid") or j.get("ssid") in ssids):   # a phone join's failure is not the file's
+            try:
+                reason = nm_reason(wifi[0]["iface"], router.booted)
+            except NetError:
+                reason = None
+    connected = {d.get("connection") for d in devices if d.get("connection")}
+    value = conf_wifi_report(ssids, nets, connected, reason)
+    _conf_wifi_cache.update(at=now, value=value)
+    return value
 
 
 def run_check(force=False):
@@ -262,6 +292,7 @@ def api_status():
         "power": _state.get("power"),
         "backend": nm.name,
         "join": _join_for(nm.join_state()),
+        "conf_wifi": conf_wifi(devices),
         "lan_url": lan_url(uplink or {}),
     })
 

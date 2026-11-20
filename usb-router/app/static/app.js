@@ -215,6 +215,7 @@
     $("setup-url").textContent = h.ui_url || ""; $("setup-id").textContent = s.device.id;
     renderJoin(s, show);
     renderConf(s, show);
+    renderConfWifi(s);
     $("setup-diag").textContent = s.local ? [fmtDiag(h.diag), fmtJoin(s.join)].filter(Boolean).join(" · ") : "";
     // the clean screen hides it; it comes back when a phone was refused, or with the D key
     $("setup-diag").classList.toggle("show", s.local && (diagKey || !!(h.diag && h.diag.refused)));
@@ -229,6 +230,16 @@
     line.classList.toggle("hidden", !(s.local && list.length));
     if (list.length) line.innerHTML = `<strong>Check the config file:</strong> ${esc(list[0])}`
       + (list.length > 1 ? ` <span class="muted">(+${list.length - 1} more on the settings page)</span>` : "");
+  };
+  /* C&G #270: what became of the Wi-Fi in usb-router.conf (read? seen? why not joined?), on the setup
+     card, so a screen that comes up on setup says why the file's network did not join. */
+  const renderConfWifi = (s) => {
+    const list = (s.conf_wifi || []).filter((w) => w.state !== "joined");
+    const line = $("setup-confwifi");
+    line.classList.toggle("hidden", !list.length);
+    line.innerHTML = list.map((w) => w.ssid
+      ? `<strong>From usb-router.conf:</strong> ${esc(w.ssid)}: ${esc(w.words)}`
+      : `<strong>From usb-router.conf:</strong> ${esc(w.words)}`).join("<br>");
   };
   /* ---------------- venue join on the screen (C&G #209 v8.3) ----------------
      The phone drops off when the hotspot stops, so the screen is where the join is seen:

@@ -372,6 +372,37 @@ def nm_reason(iface, since):
     return {"code": code, "words": NM_REASONS.get(code, f"NetworkManager said: {code}")}
 
 
+def conf_wifi_report(ssids, nets, connected, reason=None):
+    """C&G #270: what became of each Wi-Fi name in usb-router.conf, in plain words for the setup screen.
+    On Shaun's v8.8 the conf network did not join and the screen said nothing about why.
+    ssids: names from the file, in order. nets: the last scan (None = no scan to look at).
+    connected: names of the active connections. reason: nm_reason() for the Wi-Fi chip since boot.
+    This chip (Pi Zero W) hears 2.4 GHz only, so a name it never sees is 5 GHz only or out of range."""
+    if not ssids:
+        return [{"ssid": None, "state": "none",
+                 "words": "usb-router.conf has no Wi-Fi name (wifi_ssid is empty, or the file was not read)"}]
+    seen = {n.get("ssid"): n for n in (nets or [])}
+    out = []
+    for ssid in ssids:
+        n = seen.get(ssid)
+        sec = (n or {}).get("security") or ""
+        if ssid in connected:
+            state, words = "joined", "joined"
+        elif nets is not None and n is None:
+            state, words = "not-seen", "not seen: the screen hears 2.4 GHz only (5 GHz only, or too far away)"
+        elif "WPA3" in sec and "WPA2" not in sec:
+            state, words = "wpa3-only", "the network is WPA3 only; this screen joins WPA2 (turn on WPA2/WPA3 mixed)"
+        elif reason:
+            state, words = "failed", f"did not join: {reason['words']}"
+        elif n is not None:
+            state, words = "seen", "seen, not joined yet"
+        else:
+            state, words = "unknown", "not joined yet"
+        out.append({"ssid": ssid, "state": state, "words": words,
+                    "signal": (n or {}).get("signal"), "security": sec or None, "band": (n or {}).get("band")})
+    return out
+
+
 def _plain_error(text):
     if "Secrets were required" in text or "802-11-wireless-security" in text:
         return NM_REASONS["no-secrets"]
