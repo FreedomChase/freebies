@@ -70,6 +70,39 @@ CONF_PATHS = [
 
 STATE_DIR = Path(os.environ.get("USB_ROUTER_STATE_DIR", "/var/lib/usb-router"))
 
+# C&G #273: Windows hides the ending, so "usb-router.conf" saved from Notepad is often usb-router.conf.txt.
+# When the real name is missing in a folder, one of these is read in its place (and the screen says so).
+CONF_STAND_INS = ("usb-router.conf.txt", "usb-router.txt", "usb-router.conf.conf")
+
+
+def _near_misses(folder):
+    """C&G #273: files in folder whose name looks like usb-router.conf but is not exactly it."""
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return []
+    out = []
+    for name in sorted(names):
+        low = name.lower().replace(" ", "-").replace("_", "-")
+        if name == "usb-router.conf" or name.lower().endswith(".example"):
+            continue
+        if low.startswith(("usb-router", "usbrouter")) or (low.endswith(".conf.txt")):
+            out.append(name)
+    return out
+
+
+def _decode(path):
+    try:
+        raw = open(path, "rb").read()
+    except OSError:
+        return None
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return None
+
 
 # Passwords we refuse to run a hotspot with (old defaults, common guesses).
 WEAK_PASSWORDS = {"changeme123", "changeme", "password", "password1", "12345678", "123456789",
@@ -250,13 +283,41 @@ class Config:
     def _load_files(self):
         extra = os.environ.get("USB_ROUTER_CONF")
         paths = CONF_PATHS + ([extra] if extra else [])
+        # C&G #273: what was looked for and found, so the setup screen can say WHY there is no Wi-Fi name
+        self.conf_trace = {"looked": [], "read": [], "unreadable": [], "near": [], "stand_in": [], "ssid_lines": []}
         for path in paths:
-            if not path or not os.path.exists(path):
+            if not path:
                 continue
+            user = not path.startswith("/etc/")          # /etc/usb-router is the image's own defaults
+            if not os.path.exists(path):
+                folder = os.path.dirname(path)
+                if not user or not os.path.isdir(folder):
+                    continue
+                self.conf_trace["looked"].append(path)
+                near = _near_misses(folder)
+                by_low = {n.lower(): n for n in near}
+                stand_in = next((by_low[n] for n in CONF_STAND_INS if n in by_low), None)
+                if stand_in is None:
+                    self.conf_trace["near"] += [os.path.join(folder, n) for n in near]
+                    continue
+                path = os.path.join(folder, stand_in)
+                self.conf_trace["stand_in"].append(path)
+                self.problems.append((0.4, f"{stand_in} was read as usb-router.conf (Windows hides the .txt "
+                                           f"ending). Rename it to usb-router.conf."))
+            elif user:
+                self.conf_trace["looked"].append(path)
             parser, problems = _read_conf(path)
             self.problems += problems
             if parser is None:
+                if user:
+                    self.conf_trace["unreadable"].append((path, problems[0][1] if problems else ""))
                 continue
+            if user:
+                self.conf_trace["read"].append(path)
+                # _scan_lines reads lines before any heading as [usb-router], as _read_conf does
+                for n, section, key, kind in _scan_lines(_decode(path) or ""):
+                    if kind == "set" and key == "wifi_ssid":
+                        self.conf_trace["ssid_lines"].append((path, n, section))
             section = parser["usb-router"] if parser.has_section("usb-router") else parser["DEFAULT"]
             for key in DEFAULTS:
                 if key in section:
@@ -482,6 +543,37 @@ class Config:
         url = url if url is not None else self.get("homepage")
         name = self.get("device_name") or self.device_id()
         return url.replace("{device_id}", self.device_id()).replace("{device_name}", name)
+
+    def wifi_why(self) -> str:
+        """C&G #273: why there is no Wi-Fi name from usb-router.conf, in plain words for the setup screen.
+        Shaun's TV said only "wifi_ssid is empty, or the file was not read". Names files and line numbers,
+        never what is typed in the file (it holds passwords, P&T #1528)."""
+        if "USB_ROUTER_WIFI_SSID" in os.environ:
+            return "the Wi-Fi name is set empty by USB_ROUTER_WIFI_SSID (an environment setting), which beats the file"
+        if "wifi_ssid" in getattr(self, "saved_keys", set()) and _unquote(self.file_values.get("wifi_ssid", "")):
+            return "a blank Wi-Fi name was saved on this screen, so wifi_ssid in usb-router.conf is not used"
+        t = getattr(self, "conf_trace", None) or {}
+        read = t.get("read", [])
+        if not read:
+            if t.get("unreadable"):
+                path, words = t["unreadable"][0]
+                return words or f"{os.path.basename(path)} could not be read"
+            where = " or ".join(os.path.dirname(p) or "." for p in t.get("looked", [])) or "the stick"
+            words = f"usb-router.conf was not found (looked in {where})"
+            near = [os.path.basename(p) for p in t.get("near", [])]
+            if near:
+                words += f"; on the drive instead: {', '.join(near[:4])}. Rename it to usb-router.conf"
+            return words
+        name = os.path.basename(read[-1])
+        lines = [(n, sec) for p, n, sec in t.get("ssid_lines", []) if p == read[-1]]
+        if not lines:
+            return f"{name} was read but has no wifi_ssid line. Add one: wifi_ssid = your Wi-Fi name"
+        ours = [n for n, sec in lines if sec == "usb-router"]
+        if not ours:
+            return (f"{name}: wifi_ssid on line {lines[0][0]} is under another [ ] heading, not [usb-router], "
+                    f"so it is not used. Move it under [usb-router]")
+        return (f"{name}: wifi_ssid on line {ours[-1]} is empty. Write the Wi-Fi name after the = sign "
+                f"(if you did, the stick was pulled out before the save finished: eject it first)")
 
     def provisioned_wifi(self):
         """[(ssid, password), ...] from the config file, for zero-touch setup."""

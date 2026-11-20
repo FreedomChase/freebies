@@ -120,7 +120,7 @@ def conf_wifi(devices, max_age=20):
             except NetError:
                 reason = None
     connected = {d.get("connection") for d in devices if d.get("connection")}
-    value = conf_wifi_report(ssids, nets, connected, reason)
+    value = conf_wifi_report(ssids, nets, connected, reason, why=None if ssids else cfg.wifi_why())
     _conf_wifi_cache.update(at=now, value=value)
     return value
 

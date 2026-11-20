@@ -372,15 +372,15 @@ def nm_reason(iface, since):
     return {"code": code, "words": NM_REASONS.get(code, f"NetworkManager said: {code}")}
 
 
-def conf_wifi_report(ssids, nets, connected, reason=None):
+def conf_wifi_report(ssids, nets, connected, reason=None, why=None):
     """C&G #270: what became of each Wi-Fi name in usb-router.conf, in plain words for the setup screen.
     On Shaun's v8.8 the conf network did not join and the screen said nothing about why.
     ssids: names from the file, in order. nets: the last scan (None = no scan to look at).
     connected: names of the active connections. reason: nm_reason() for the Wi-Fi chip since boot.
     This chip (Pi Zero W) hears 2.4 GHz only, so a name it never sees is 5 GHz only or out of range."""
-    if not ssids:
+    if not ssids:   # C&G #273: why (Config.wifi_why): not found, a .txt name, empty, other heading, ...
         return [{"ssid": None, "state": "none",
-                 "words": "usb-router.conf has no Wi-Fi name (wifi_ssid is empty, or the file was not read)"}]
+                 "words": why or "usb-router.conf has no Wi-Fi name (wifi_ssid is empty, or the file was not read)"}]
     seen = {n.get("ssid"): n for n in (nets or [])}
     out = []
     for ssid in ssids:
