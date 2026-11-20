@@ -420,3 +420,74 @@ def test_helper_hands_the_radio_back_in_station_mode(monkeypatch):
     i_type = calls.index(["iw", "dev", "wlan0", "set", "type", "managed"])
     i_up = calls.index(["ip", "link", "set", "wlan0", "up"])
     assert i_down < i_type < i_up
+
+
+# -- C&G #273 (Shaun at the TV, 20 Nov): "VVC did not connect. NetworkManager said: supplicant-available" ------
+SUPPLICANT_ONLY = """<info>  [1.0] device (wlan0): state change: unmanaged -> unavailable (reason 'managed', sys-iface-state: 'external')
+<info>  [2.0] device (wlan0): state change: unavailable -> disconnected (reason 'supplicant-available', sys-iface-state: 'managed')
+"""
+
+
+def test_supplicant_available_is_a_normal_step_not_a_failure_reason(monkeypatch):
+    monkeypatch.setattr(netman, "_run", lambda args, timeout=0, check=True: SUPPLICANT_ONLY)
+    assert netman.nm_reason("wlan0", 100) is None
+    later = NM_JOURNAL + "<info>  [12.0] device (wlan0): state change: unavailable -> disconnected (reason 'supplicant-available', x)\n"
+    monkeypatch.setattr(netman, "_run", lambda args, timeout=0, check=True: later)
+    assert netman.nm_reason("wlan0", 100)["code"] == "no-secrets"
+
+
+def test_the_reason_into_failed_wins_over_a_later_one(monkeypatch):
+    j = ("device (wlan0): state change: config -> failed (reason 'supplicant-timeout', x)\n"
+         "device (wlan0): state change: failed -> disconnected (reason 'carrier-changed', x)\n")
+    monkeypatch.setattr(netman, "_run", lambda args, timeout=0, check=True: j)
+    assert netman.nm_reason("wlan0", 100)["code"] == "supplicant-timeout"
+
+
+def _fail_up_once(monkeypatch, err="Error: Connection activation failed: (1) Unknown error."):
+    real = netman.nmcli
+    left = {"n": 1}
+
+    def nmcli(*a, **k):
+        if "up" in a and "connection" in a and left["n"] > 0:
+            left["n"] -= 1
+            real(*a, **k)                       # record the call in the fake
+            raise netman.NetError(err)
+        return real(*a, **k)
+    monkeypatch.setattr(netman, "nmcli", nmcli)
+
+
+def test_a_join_that_fails_once_is_tried_again_before_setup_comes_back(tmp_path, monkeypatch):
+    nm, calls, state = _fake_nm(tmp_path, monkeypatch, True, ["VVC"], journal=SUPPLICANT_ONLY)
+    _fail_up_once(monkeypatch)
+    nm.wifi_connect("VVC", "venuepass1")
+    j = nm.join_state()
+    assert j["ok"] is True and state["connected"] == "VVC"
+    assert sum(1 for c in calls if c[:1] == ["nmcli"] and "up" in c) == 2
+    assert not state["active"]                                            # the setup hotspot did not come back
+
+
+def test_a_failed_join_says_the_real_error_and_what_the_scan_saw(tmp_path, monkeypatch):
+    nm, calls, state = _fake_nm(tmp_path, monkeypatch, True, ["VVC"], connect_ok=False, journal=SUPPLICANT_ONLY)
+    with pytest.raises(netman.NetError) as e:
+        nm.wifi_connect("VVC", "venuepass1")
+    j = nm.join_state()
+    assert "supplicant-available" not in j["reason"]
+    assert j["reason"].startswith("Connection activation failed")         # nmcli's own words, not a normal step
+    assert "VVC was in the last scan: " in j["reason"] and "WPA2" in j["reason"]
+    assert str(e.value) == j["reason"] and "venuepass1" not in json.dumps(j)
+    assert sum(1 for c in calls if c[:1] == ["nmcli"] and "up" in c) == 2  # tried twice
+    assert state["active"]                                                 # then setup came back
+
+
+def test_a_network_not_in_the_scan_is_named_on_the_failed_line(tmp_path, monkeypatch):
+    nm, calls, state = _fake_nm(tmp_path, monkeypatch, True, ["Other"], connect_ok=False, journal="")
+    with pytest.raises(netman.NetError):
+        nm.wifi_connect("VVC", "venuepass1")
+    assert "VVC was not in the last scan (this screen hears 2.4 GHz only" in nm.join_state()["reason"]
+
+
+def test_a_wrong_password_is_not_tried_twice(tmp_path, monkeypatch):
+    nm, calls, state = _fake_nm(tmp_path, monkeypatch, True, ["Cafe Sol"], connect_ok=False, journal=NM_JOURNAL)
+    with pytest.raises(netman.NetError):
+        nm.wifi_connect("Cafe Sol", "wrongpass1")
+    assert sum(1 for c in calls if c[:1] == ["nmcli"] and "up" in c) == 1

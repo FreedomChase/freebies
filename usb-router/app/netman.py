@@ -353,20 +353,27 @@ NM_REASONS = {
     "dhcp-start-failed": "joined, but could not ask for an address (DHCP)",
 }
 _IGNORED_REASONS = {"none", "unknown", "new-activation", "user-requested", "connection-assumed",
-                    "now-managed", "now-unmanaged", "removed", "managed", "unmanaged"}
+                    "now-managed", "now-unmanaged", "removed", "managed", "unmanaged",
+                    # C&G #273: Shaun's TV showed "NetworkManager said: supplicant-available". That is logged
+                    # every time the chip comes back from the hotspot (unavailable -> disconnected): a normal
+                    # step, never why a join failed.
+                    "supplicant-available", "sleeping", "connection-removed"}
 
 
 def nm_reason(iface, since):
     """The last real failure reason NetworkManager logged for iface since `since` (epoch s)."""
     out = _run(["journalctl", "-u", "NetworkManager", "--since", f"@{int(since) - 1}", "-o", "cat",
                 "--no-pager", "-q"], timeout=10, check=False) or ""
-    code = None
+    code = failed = None
     for line in out.splitlines():
         if f"device ({iface})" not in line or "state change" not in line:
             continue
         m = re.search(r"reason '([a-z0-9-]+)'", line)
         if m and m.group(1) not in _IGNORED_REASONS:
             code = m.group(1)
+            if re.search(r"-> failed\b", line):   # C&G #273: a reason on the step INTO failed is the cause
+                failed = code
+    code = failed or code
     if not code:
         return None
     return {"code": code, "words": NM_REASONS.get(code, f"NetworkManager said: {code}")}
@@ -401,6 +408,16 @@ def conf_wifi_report(ssids, nets, connected, reason=None, why=None):
         out.append({"ssid": ssid, "state": state, "words": words,
                     "signal": (n or {}).get("signal"), "security": sec or None, "band": (n or {}).get("band")})
     return out
+
+
+def _seen_words(ssid, net, seen):
+    """C&G #273: was the network in the last scan, and on which band, for the failed-join line."""
+    if not seen or not net:
+        return f"{ssid} was not in the last scan (this screen hears 2.4 GHz only: 5 GHz only, or too far)"
+    band = net.get("band")
+    bits = [f"{band} GHz" if band else None, net.get("security") or "open",
+            f"signal {net['signal']}%" if net.get("signal") is not None else None]
+    return f"{ssid} was in the last scan: " + ", ".join(b for b in bits if b)
 
 
 def _plain_error(text):
@@ -783,9 +800,12 @@ class HostapdNetworkManager(NetworkManager):
             self.sleep(0.5)
         if not ready:
             return False, False
+        self._seen_net = None
         for _ in range(15):
             try:
-                if any(n["ssid"] == ssid for n in NetworkManager.wifi_scan(self, rescan=True)):
+                hit = [n for n in NetworkManager.wifi_scan(self, rescan=True) if n["ssid"] == ssid]
+                if hit:
+                    self._seen_net = max(hit, key=lambda n: n.get("signal") or 0)   # C&G #273: band + security
                     return True, True
             except NetError:
                 pass
@@ -853,9 +873,25 @@ class HostapdNetworkManager(NetworkManager):
                     nmcli("--wait", "45", "connection", "up", ssid, "ifname", ap_iface, timeout=60)
             except NetError as e:
                 reason = nm_reason(ap_iface, started) or {}
+                if ready and reason.get("code") not in ("no-secrets", "ssid-not-found"):
+                    # C&G #273: not a wrong password and not "not found": the radio may still have been
+                    # settling after the hotspot. Once more, after a pause, before setup comes back.
+                    self._join_step("joining, second try", first_error=str(e)[:200], first_reason=reason.get("code"))
+                    self.sleep(5)
+                    try:
+                        nmcli("--wait", "45", "connection", "up", ssid, "ifname", ap_iface, timeout=60)
+                        e = None
+                    except NetError as e2:
+                        e = e2
+                        reason = nm_reason(ap_iface, started) or {}
+                if e is None:
+                    self._join_step("joined", ok=True, scan=_seen_words(ssid, getattr(self, "_seen_net", None), seen))
+                    return
                 words = reason.get("words") or _plain_error(str(e))
+                scan = _seen_words(ssid, getattr(self, "_seen_net", None), seen)
+                words = f"{words.rstrip('. ')}. {scan}"
                 self._join_step("failed", ok=False, reason=words, nm_reason=reason.get("code"),
-                                nm_error=str(e)[:200])
+                                nm_error=str(e)[:200], scan=scan)
                 if ssid not in saved_before:   # a failed first try must not count as "configured"
                     nmcli("connection", "delete", ssid, check=False)
                 try:
