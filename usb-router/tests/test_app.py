@@ -45,7 +45,7 @@ def test_index_renders(client):
     r = client.get("/")
     assert r.status_code == 200
     assert b"Display Player" in r.data
-    assert b"ORIONPATH" not in r.data          # Shaun 17 Nov 09:56 CET: the icon only, no word (C&G #209 v8.4)
+    assert ("orion" + "path").encode() not in r.data.lower()  # C&G #270 v9.0: no old brand anywhere (Shaun by mail 20 Nov 05:30 CET)
 
 
 def test_splash_has_icon_page_and_plymouth():
@@ -55,10 +55,28 @@ def test_splash_has_icon_page_and_plymouth():
     html = (root / "app/templates/index.html").read_text()
     box = html[html.index('class="boot-box"'):html.index("</div></div>", html.index('class="boot-box"'))]
     assert box.index("boot-mark") < box.index("boot-text") < box.index("boot-bar")
-    script = (root / "pizero/splash/orionpath.script").read_text()
+    script = (root / "pizero/splash/displayplayer.script").read_text()
     assert 'Image("icon.png")' in script
     assert (root / "pizero/splash/icon.png").stat().st_size > 1000
     assert "icon.png" in (root / "pizero/quiet-boot.sh").read_text()
+
+
+def test_vvc_logo_and_no_old_brand_270():
+    """C&G #270 v9.0 (Shaun by mail 20 Nov 05:30 CET): the VVC logo in place of the old icon; the old brand nowhere
+    in what the image ships (app/, pizero/), not in a file name, not in a line."""
+    from pathlib import Path
+    from PIL import Image
+    root = Path(__file__).resolve().parents[1]
+    css = (root / "app/static/style.css").read_text()
+    assert css.count('url("brand/vvc-icon.png")') == 2 and "mask" not in css
+    assert Image.open(root / "app/static/brand/vvc-icon.png").size == (384, 384)
+    assert Image.open(root / "pizero/splash/icon.png").size == (120, 120)
+    old = "orion" + "path"
+    hits = [str(f.relative_to(root)) for d in ("app", "pizero") for f in (root / d).rglob("*")
+            if f.is_file() and "__pycache__" not in f.parts
+            and (old in f.name.lower() or old.encode() in f.read_bytes().lower())]
+    assert hits == []
+    assert "Theme=displayplayer" in (root / "pizero/splash/plymouthd.conf").read_text()
 
 
 def test_status_offline_initially(client):

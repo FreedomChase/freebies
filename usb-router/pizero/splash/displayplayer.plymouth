@@ -1,8 +1,8 @@
 [Plymouth Theme]
-Name=ORIONPATH
+Name=Display Player
 Description=Display Player boot splash (C&G #209 v8.4): "Setting up, please wait..." and a progress bar on the setup screen's ground
 ModuleName=script
 
 [script]
-ImageDir=/usr/share/plymouth/themes/orionpath
-ScriptFile=/usr/share/plymouth/themes/orionpath/orionpath.script
+ImageDir=/usr/share/plymouth/themes/displayplayer
+ScriptFile=/usr/share/plymouth/themes/displayplayer/displayplayer.script

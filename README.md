@@ -40,4 +40,4 @@ The SQLite database is created on first run and is not committed — short links
 runtime state, not source. `is_safe_url()` blocks private and loopback destinations
 before a link is stored, which is the part most shorteners skip.
 
-Part of [ORIONPATH](https://orionpath.io).
+

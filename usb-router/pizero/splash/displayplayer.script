@@ -1,4 +1,4 @@
-# Display Player boot splash (C&G #209 v8.4, Shaun 17 Nov 09:53 CET: no ORIONPATH; a progress bar
+# Display Player boot splash (C&G #209 v8.4, Shaun 17 Nov 09:53 CET: icon only, no brand word; a progress bar
 # and "Setting up, please wait..."; 10:00 CET: the icon back, above the text). bg.png, icon.png,
 # text.png, track.png and fill.png are
 # rendered from the setup page's .boot-splash (splash/render.py) at 1920x1080 and drawn here in

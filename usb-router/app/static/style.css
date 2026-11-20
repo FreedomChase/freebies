@@ -1,4 +1,4 @@
-/* ORIONPATH, dark (Shaun, 17 Nov 06:05 CET, S&D #193): navy ground with the brand's cinematic
+/* Display Player, dark (Shaun, 17 Nov 06:05 CET, S&D #193): navy ground with a cinematic
    light, paper ink, light pink accent, Instrument Sans with tight tracking. Vendored, no CDN. */
 @font-face { font-family: "Instrument Sans"; src: url("brand/instrument-sans-latin.woff2") format("woff2");
   font-weight: 400 700; font-style: normal; font-display: swap; }
@@ -44,18 +44,9 @@ code, kbd { background: var(--panel-2); border: 1px solid var(--line); padding: 
   padding: 22px 24px; max-width: 1280px; width: 100%; margin: 0 auto; }
 .brand { display: flex; align-items: center; gap: 14px; }
 .sub { color: var(--muted); margin: 2px 0 0; font-size: 0.95rem; }
-/* the ORIONPATH logo in its light-to-pink gradient: the PNG's shape as a mask over a gradient;
-   a browser without masks gets the plain light logo instead */
-.op-mark, .op-lockup { display: block; background: url("brand/lockup-264-light.png") no-repeat center / contain; }
-.op-mark { width: 44px; height: 40px; background-image: url("brand/mark-96.png"); }
-.op-lockup { width: 180px; aspect-ratio: 560 / 419; }
-@supports ((-webkit-mask-image: none) or (mask-image: none)) {
-  .op-mark, .op-lockup {
-    background: linear-gradient(160deg, #FFFFFF 0%, var(--paper) 38%, var(--pink-hi) 72%, var(--pink) 100%);
-    -webkit-mask: url("brand/lockup-560.png") no-repeat center / contain;
-    mask: url("brand/lockup-560.png") no-repeat center / contain; }
-  .op-mark { -webkit-mask-image: url("brand/mark-96.png"); mask-image: url("brand/mark-96.png"); }
-}
+/* C&G #270 v9.0 (Shaun by mail 20 Nov 05:30 CET): the VVC logo, in its own colours on a white rounded tile
+   (brand-src/make_vvc_icon.py); VVC blue is too dark to read straight on the navy ground */
+.op-mark { display: block; width: 40px; height: 40px; background: url("brand/vvc-icon.png") no-repeat center / contain; }
 
 .pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
   background: var(--panel); border: 1px solid var(--line); font-weight: 600; white-space: nowrap; }
@@ -171,7 +162,7 @@ body.pin-locked main > :not(#pin-gate) { display: none !important; }
 /* Wi-Fi check line (S&D #193): small, but readable from a phone camera photo of the screen */
 .diag { font-family: ui-monospace, "DejaVu Sans Mono", monospace; font-size: 0.85rem; word-break: break-word; }
 
-/* ---- Setup screen, ORIONPATH clean (Shaun, 17 Nov 06:05 CET): logo, the QR, steps 1-2-3. Nothing else. ---- */
+/* ---- Setup screen, clean (Shaun, 17 Nov 06:05 CET): logo, the QR, steps 1-2-3. Nothing else. ---- */
 body.setup-mode .top, body.setup-mode .foot, body.setup-mode main > :not(#setup-card) { display: none !important; }
 body.setup-mode main { display: flex; align-items: center; padding: 5vh 6vw; max-width: none; }
 body.setup-mode .setup-qr { min-height: 0; width: 100%; max-width: 1500px; margin: 0 auto;
@@ -256,9 +247,9 @@ body.powering-off main > #power-off:not(.hidden) { display: flex !important; }
    matches it at any 16:9 resolution and the handoff from Plymouth to cog does not jump. */
 .boot-splash { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
   background: var(--ground-dramatic); transition: opacity .9s ease; }
-/* C&G #209 v8.4 (Shaun 09:53 CET): no ORIONPATH; "Setting up, please wait..." and a progress bar */
+/* C&G #209 v8.4 (Shaun 09:53 CET): icon only, no brand word; "Setting up, please wait..." and a progress bar */
 .boot-box { display: flex; flex-direction: column; align-items: center; gap: 3.4vh; }
-/* v8.4b (Shaun 10:00 CET: the icon back, no ORIONPATH word; frontend 10:04: about 11vh tall, about 4vh to the text) */
+/* v8.4b (Shaun 10:00 CET: the icon back, no brand word; frontend 10:04: about 11vh tall, about 4vh to the text) */
 .boot-splash .boot-mark { width: auto; height: 11vh; margin-bottom: 0.6vh; }
 .boot-text { margin: 0; font-size: 2.1vw; font-weight: 500; letter-spacing: -0.03em; color: var(--paper); }
 .boot-bar { width: 26vw; height: 0.7vh; min-height: 5px; border-radius: 99px; overflow: hidden;
@@ -283,14 +274,10 @@ body.powering-off main > #power-off:not(.hidden) { display: flex !important; }
 body.setup-mode .join-line { font-size: clamp(1.1rem, 1.6vw, 1.5rem); max-width: 40ch; }
 .drop-note { margin: 0.8em 0; padding: 0.8em 0.9em; border-radius: 8px; background: rgba(255, 255, 255, 0.08); line-height: 1.4; }
 
-/* Display Player name with the icon only (Shaun, 17 Nov 09:53 CET: "remove orionpath text just icon") */
+/* Display Player name with the icon only, no brand word (Shaun, 17 Nov 09:53 CET) */
 .dp-brand { display: flex; align-items: center; gap: 0.55em; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.04em; }
-.dp-mark { display: block; width: 1.75em; aspect-ratio: 321 / 291; flex: none;
-  background: url("brand/mark-300.png") no-repeat center / contain; }
-@supports ((-webkit-mask-image: none) or (mask-image: none)) {
-  .dp-mark { background: linear-gradient(160deg, #FFFFFF 0%, var(--paper) 38%, var(--pink-hi) 72%, var(--pink) 100%);
-    -webkit-mask: url("brand/mark-300.png") no-repeat center / contain; mask: url("brand/mark-300.png") no-repeat center / contain; }
-}
+.dp-mark { display: block; width: 1.6em; aspect-ratio: 1; flex: none;
+  background: url("brand/vvc-icon.png") no-repeat center / contain; }
 .setup-phone .dp-brand { display: none; }
 body.phone-setup .setup-phone .dp-brand { display: flex; margin-bottom: 1.75rem; }
 

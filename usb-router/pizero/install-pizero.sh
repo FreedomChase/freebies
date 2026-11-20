@@ -28,7 +28,7 @@ apt-get update
 PKGS="network-manager dnsmasq-base hostapd nftables iw wireless-regdb python3 python3-flask python3-qrcode python3-pil curl zram-tools"
 # the screen: cog (WPE WebKit) on DRM, no X server, no window manager
 [ "$KIOSK" -eq 1 ] && PKGS="$PKGS cog libgles2 libegl1 dbus-user-session fonts-dejavu-core"
-# the boot splash: plymouth (script plug-in) shows the ORIONPATH splash instead of boot text (C&G #209)
+# the boot splash: plymouth (script plug-in) shows the Display Player splash instead of boot text (C&G #209)
 [ "$KIOSK" -eq 1 ] && PKGS="$PKGS plymouth"
 # shellcheck disable=SC2086
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $PKGS

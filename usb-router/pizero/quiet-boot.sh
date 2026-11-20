@@ -1,6 +1,6 @@
 #!/bin/bash
 # C&G #209 v8.2: boot like a set-top box. From power-on to the setup screen the screen shows no
-# text, cursor, rainbow or console: black, then the ORIONPATH splash (Plymouth), then the page's
+# text, cursor, rainbow or console: black, then the Display Player splash (Plymouth), then the page's
 # own splash fading into the QR screen. The D key on the page still shows the diagnostics.
 #
 #   quiet-boot.sh ROOT BOOT     ROOT = the root file system (/ on the device, a mount when building
@@ -16,16 +16,16 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 [ -x "$ROOT/usr/bin/plymouth" ] || { echo "quiet-boot: plymouth is not installed in $ROOT" >&2; exit 1; }
 
 # 1. the theme, as the default
-T="$ROOT/usr/share/plymouth/themes/orionpath"
+T="$ROOT/usr/share/plymouth/themes/displayplayer"
 install -d -m 755 "$T"
-for f in orionpath.plymouth orionpath.script bg.png icon.png text.png track.png fill.png; do
+for f in displayplayer.plymouth displayplayer.script bg.png icon.png text.png track.png fill.png; do
   install -m 644 "$HERE/splash/$f" "$T/$f"
 done
 rm -f "$T/logo.png"   # v8.2-v8.3 had a logo; v8.4 draws icon.png instead (Shaun 17 Nov 09:53, 10:00 CET)
 install -d -m 755 "$ROOT/etc/plymouth"
 install -m 644 "$HERE/splash/plymouthd.conf" "$ROOT/etc/plymouth/plymouthd.conf"
 # plymouth-set-default-theme only writes this link (without -R it leaves the initramfs alone)
-ln -sfn orionpath/orionpath.plymouth "$ROOT/usr/share/plymouth/themes/default.plymouth"
+ln -sfn displayplayer/displayplayer.plymouth "$ROOT/usr/share/plymouth/themes/default.plymouth"
 
 # 2. the handoff: splash stays until the connection manager answers, then cog paints over it
 install -d -m 755 "$ROOT/opt/usb-router/pizero"
