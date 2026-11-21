@@ -12,7 +12,8 @@ screen can be set up from a phone, or pre-configured so nobody touches it at all
   server is down, and scheduled reloads.
 - **Routes**: while offline and unconfigured it broadcasts a setup hotspot so
   a phone can configure it; once online that hotspot switches off. Sharing the
-  connection to nearby devices is a separate, opt-in setting.
+  connection to nearby devices is a separate setting, on by default, at most 10
+  phones at once (needs a spare adapter, see below).
 - **Reports in** to a small fleet dashboard (included) where you see every
   screen and change its URL, rotation or reboot it remotely.
 
@@ -68,14 +69,14 @@ is offline; F11 toggles fullscreen.
 4. Offline for 25 s with no Wi-Fi configured: the setup hotspot and QR codes appear.
 5. Online: the setup hotspot switches off, the browser goes fullscreen on the
    content URL (`kiosk = true`), heartbeats go to the fleet dashboard if a URL
-   and token are set, and the sharing hotspot starts only if `hotspot_enabled`.
+   and token are set, and the sharing hotspot starts (on by default; off with `hotspot_enabled = false`).
 6. Content server down? The browser shows a "Content unavailable, retrying"
    screen with the screen ID and retries with backoff. Network back? It reloads.
 7. Saved networks, settings and downloads persist on the stick.
 
 ### Which adapter becomes the hotspot
 
-| Internet comes from | Hotspot runs on (sharing is opt-in: `hotspot_enabled = true`) |
+| Internet comes from | Hotspot runs on (sharing is on by default: `hotspot_enabled = true`) |
 |---|---|
 | Ethernet cable or 4G dongle | the built-in Wi-Fi card |
 | Wi-Fi | a second AP-capable USB adapter, otherwise a free Ethernet port (wired sharing), otherwise none |
@@ -83,6 +84,13 @@ is offline; F11 toggles fullscreen.
 
 NetworkManager's shared mode provides DHCP (dnsmasq), DNS forwarding and NAT.
 Hotspot clients get `10.42.0.x`; the stick is `10.42.0.1`.
+
+At most `hotspot_max_clients` phones (default and ceiling 10) share at once. The cap
+is enforced twice: hostapd `max_num_sta` refuses the 11th association, and dnsmasq
+`dhcp-lease-max` refuses the 11th address ("no leases left"; shown with real
+dnsmasq by `sudo sh tests/dhcp_cap_281.sh`). The setup page shows
+"Sharing on ... n/10 devices". A stick online over Wi-Fi with no spare adapter
+shows "No spare adapter" instead: it cannot share.
 
 ## What is in this folder
 
@@ -166,7 +174,8 @@ All keys are in `config/usb-router.conf.example`. The important ones:
 | `setup_hotspot` | `true` | Broadcast while offline and unconfigured so a phone can set the screen up |
 | `hotspot_password` | blank = generated per stick | Hotspot password. Weak values (`changeme…`, `password`, `12345678`) are refused |
 | `admin_pin` | blank = image default PIN, else generated per stick | PIN required for every change; a generated or New PIN is shown on the screen only, the default never |
-| `hotspot_enabled`, `hotspot_ssid`, `hotspot_band` | `false`, `Display Player`, `bg` | Share the connection with nearby devices once online (opt-in) |
+| `hotspot_enabled`, `hotspot_ssid`, `hotspot_band` | `true`, `Display Player`, `bg` | Share the connection with nearby devices once online (on by default) |
+| `hotspot_max_clients` | `10` | Phones that may share at once, 1 to 10; can be lowered, never raised |
 | `lan_access` | `true` | Serve the setup page to hotspot clients (PIN still required) |
 | `fleet_url`, `fleet_token`, `fleet_interval` | empty, empty, 60 | Fleet dashboard. No token = the client stays off |
 | `allow_exit` | `false` | Quit button / Ctrl+Q |

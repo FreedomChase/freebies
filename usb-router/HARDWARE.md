@@ -61,8 +61,10 @@ Minimum 8 GB. Avoid USB 2.0 and unbranded drives.
 For a signage screen the built-in Intel card does everything: connects to the
 venue Wi-Fi, and broadcasts the setup hotspot while offline. You only need an
 extra adapter when a screen should also **share** internet to nearby devices
-while itself online over Wi-Fi (one card cannot do both). Then add an
-AP-capable USB adapter with an in-kernel driver:
+while itself online over Wi-Fi (one card cannot do both). Sharing is on by
+default since C&G #281 (at most 10 phones), so a screen that joins the venue
+Wi-Fi shares only with one of these; without it the setup page says
+"No spare adapter". Add an AP-capable USB adapter with an in-kernel driver:
 
 | Adapter | Chipset / driver | Notes |
 |---|---|---|

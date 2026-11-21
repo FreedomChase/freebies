@@ -62,9 +62,13 @@ hotspot_password =
 admin_pin =
 
 # ------------------------------------------------------------ sharing -------
-# Share the internet connection with nearby devices once online (opt-in).
-# Needs a spare adapter: a second Wi-Fi card or an Ethernet port.
-hotspot_enabled = false
+# Share the internet connection with nearby devices once online. On by default
+# (C&G #281); set false to switch it off. Needs a spare adapter: a second Wi-Fi
+# card or an Ethernet port (one Wi-Fi card cannot join a network and share).
+hotspot_enabled = true
+# Phones that may join at once: 1 to 10. Lower it here; it can never go above 10.
+# The 11th phone gets no address ("no leases left").
+hotspot_max_clients = 10
 hotspot_ssid = Display Player
 # bg = 2.4 GHz (works with every phone), a = 5 GHz
 hotspot_band = bg

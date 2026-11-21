@@ -164,3 +164,12 @@ def test_the_setup_page_shows_sharing_on_and_n_of_10():
     js = open(os.path.join(os.path.dirname(__file__), "..", "app", "static", "app.js"), encoding="utf-8").read()
     assert "Sharing on as Wi-Fi network" in js
     assert "${(h.clients || []).length}/${h.max_clients}" in js
+
+
+# -- the shipped conf: make-usb.sh copies the example onto every stick, so it must not undo the default --
+
+def test_the_shipped_example_conf_keeps_sharing_on_with_a_cap_of_10(tmp_path, monkeypatch):
+    example = os.path.join(os.path.dirname(__file__), "..", "config", "usb-router.conf.example")
+    cfg = _config(tmp_path, monkeypatch, open(example, encoding="utf-8").read())
+    assert cfg.flag("hotspot_enabled") is True
+    assert cfg.max_clients() == 10
