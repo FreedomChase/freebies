@@ -28,10 +28,11 @@ ip netns exec dp281-ap dnsmasq --conf-file="$W/dnsmasq.conf" --pid-file="$W/pid"
 sleep 2
 got=0
 for i in $(seq 1 11); do
-  if ip netns exec dp281-c$i busybox udhcpc -i c$i -n -q -t 4 -T 2 -s /bin/true >/dev/null 2>&1; then got=$((got+1)); r=leased; else r=REFUSED; fi
+  if timeout 15 ip netns exec dp281-c$i busybox udhcpc -i c$i -n -q -t 4 -T 2 -s /bin/true >/dev/null 2>&1; then got=$((got+1)); r=leased; else r=REFUSED; fi
   echo "phone $i: $r"
 done
 echo "leases in file: $(wc -l < "$W/leases")"
-grep -m1 -i 'no address available\|lease limit' "$W/log" || true
-[ "$got" -eq 10 ] && echo "PASS: 10 phones leased, the 11th refused" && exit 0
-echo "FAIL: $got phones leased"; exit 1
+why=no; grep -q "option: 56 message  6e:6f:20:6c:65:61:73:65:73:20:6c:65:66:74" "$W/log" && why=yes
+echo "dnsmasq told the 11th phone \"no leases left\" (DHCP option 56): $why"
+[ "$got" -eq 10 ] && [ "$why" = yes ] && echo "PASS: 10 phones leased, the 11th refused" && exit 0
+echo "FAIL: $got phones leased, refusal reason seen: $why"; exit 1
