@@ -440,6 +440,7 @@ def test_hotspot_refuses_weak_password(client):
 
 def test_setup_hotspot_off_once_online(client):
     srv, rt = client.server, client.server.router
+    srv.cfg.values["hotspot_enabled"] = "false"   # about the setup hotspot; sharing is on by default (C&G #281)
     rt.booted -= 60                      # past the boot grace period
     srv.nm.saved.clear()                 # an unconfigured screen
     assert rt.is_configured() is False
@@ -468,6 +469,7 @@ def test_setup_hotspot_off_once_online(client):
 def test_hotspot_left_up_across_app_restart_is_switched_off_once_online(client):
     """dev3's gap on #180: the app restarts while NetworkManager keeps the setup hotspot up."""
     srv, rt = client.server, client.server.router
+    srv.cfg.values["hotspot_enabled"] = "false"   # about the setup hotspot; sharing is on by default (C&G #281)
     rt.booted -= 60
     srv.nm.saved.clear()
     srv.nm.hotspot_start("wlan0", "USB-Router", "testpass123", "bg")   # up, but not started by this process
@@ -497,6 +499,7 @@ def test_hotspot_left_up_while_sharing_is_kept_after_app_restart(client):
 
 def test_setup_hotspot_only_when_unconfigured_or_requested(client):
     srv, rt = client.server, client.server.router
+    srv.cfg.values["hotspot_enabled"] = "false"   # about the setup hotspot; sharing is on by default (C&G #281)
     rt.booted -= 60
     # configured (a saved Wi-Fi exists) and offline -> no broadcast
     assert rt.is_configured() is True
@@ -617,7 +620,7 @@ def test_password_on_screen_is_the_one_the_hotspot_gets(client, tmp_path):
     srv = client.server
     given = []
     real = srv.nm.hotspot_start
-    srv.nm.hotspot_start = lambda iface, ssid, pw, band="bg": (given.append(pw), real(iface, ssid, pw, band))
+    srv.nm.hotspot_start = lambda iface, ssid, pw, band="bg", **kw: (given.append(pw), real(iface, ssid, pw, band, **kw))
     before = client.get("/api/settings").get_json()["settings"]["hotspot_password"]
     shown = client.post("/api/secrets/rotate", json={"name": "hotspot_password"}).get_json()["settings"]["hotspot_password"]
     # a configured password (here the env, on a stick usb-router.conf or an earlier Save) used to
@@ -644,7 +647,7 @@ def test_rotated_password_reaches_the_hotspot_when_none_is_configured(client):
     srv.cfg.values["hotspot_password"] = ""       # nothing in usb-router.conf, no earlier Save
     given = []
     real = srv.nm.hotspot_start
-    srv.nm.hotspot_start = lambda iface, ssid, pw, band="bg": (given.append(pw), real(iface, ssid, pw, band))
+    srv.nm.hotspot_start = lambda iface, ssid, pw, band="bg", **kw: (given.append(pw), real(iface, ssid, pw, band, **kw))
     assert client.post("/api/hotspot", json={"action": "start"}).status_code == 200
     first = given[-1]
     shown = client.post("/api/secrets/rotate", json={"name": "hotspot_password"}).get_json()["settings"]["hotspot_password"]
@@ -843,6 +846,7 @@ def test_page_has_the_join_banner_and_the_phone_drop_note(client):
 # -- C&G #254: Wi-Fi from usb-router.conf ------------------------------------------------------
 def test_config_wifi_never_online_falls_back_to_the_setup_hotspot(client):
     srv, rt = client.server, client.server.router
+    srv.cfg.values["hotspot_enabled"] = "false"   # about the setup hotspot; sharing is on by default (C&G #281)
     srv.cfg.values["wifi_ssid"] = "Venue"
     assert rt.is_configured() is True
     t0 = __import__("time").time()

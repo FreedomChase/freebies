@@ -72,7 +72,20 @@ def validate(req):
     if channel not in CHANNELS[band]:
         raise Invalid(f"channel {channel} is not allowed on band {band}")
     return {"iface": iface, "ssid": ssid, "password": password, "band": band,
-            "channel": channel, "country": _country(req.get("country")), "share": bool(req.get("share"))}
+            "channel": channel, "country": _country(req.get("country")), "share": bool(req.get("share")),
+            "max_clients": _max_clients(req.get("max_clients"))}
+
+
+MAX_CLIENTS = 10   # C&G #281: never more phones than this, whatever the request says
+
+
+def _max_clients(value):
+    """1..MAX_CLIENTS; missing or bad = MAX_CLIENTS (the cap always applies)."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return MAX_CLIENTS
+    return max(1, min(n, MAX_CLIENTS))
 
 
 def _country(value):
@@ -97,6 +110,8 @@ def hostapd_conf(v):
         "auth_algs=1",
         "ignore_broadcast_ssid=0",
         "macaddr_acl=0",
+        # C&G #281: the 11th phone is refused at association (hostapd answers "AP is full")
+        f"max_num_sta={v.get('max_clients', MAX_CLIENTS)}",
         "wpa=2",
         "wpa_key_mgmt=WPA-PSK",
         "rsn_pairwise=CCMP",
@@ -134,6 +149,8 @@ def dnsmasq_conf(v, captive_text=""):
         f"dhcp-option=option:router,{ADDR}",
         f"dhcp-option=option:dns-server,{ADDR}",
         f"dhcp-leasefile={LEASES}",
+        # C&G #281: and no address for more than the cap, if one slips past hostapd
+        f"dhcp-lease-max={v.get('max_clients', MAX_CLIENTS)}",
         "dhcp-authoritative",
         "log-dhcp",
     ]

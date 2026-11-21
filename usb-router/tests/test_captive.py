@@ -88,14 +88,18 @@ class FakeCfg:
     def provisioned_wifi(self):
         return None
 
+    def max_clients(self):
+        return 10
+
 
 class Spy:
     def __init__(self):
         self.calls = []
         self.active = False
 
-    def prepare(self, iface):
+    def prepare(self, iface, max_clients=None):
         self.calls.append(iface)
+        self.caps = getattr(self, "caps", []) + [max_clients]
         self.active = iface is not None
 
 

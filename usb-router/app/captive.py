@@ -52,20 +52,31 @@ PROBE_HOSTS = (
 _IFACE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,15}$")
 
 
-def dns_conf_text(iface):
-    """The dnsmasq lines for captive mode on iface; '' when iface is None (captive off)."""
+def _lease_line(max_clients):
+    """C&G #281: NetworkManager's shared dnsmasq gives no more addresses than the client cap."""
+    if max_clients is None:
+        return []
+    n = int(max_clients)
+    if not 1 <= n <= 10:
+        raise ValueError(f"bad client cap {max_clients!r}")
+    return [f"dhcp-lease-max={n}"]
+
+
+def dns_conf_text(iface, max_clients=None):
+    """The dnsmasq lines for captive mode on iface (none when iface is None), plus the lease cap."""
     if not iface:
-        return "# captive portal off (S&D #193)\n"
+        return "\n".join(["# captive portal off (S&D #193)"] + _lease_line(max_clients)) + "\n"
     if not _IFACE_RE.match(iface):
         raise ValueError(f"bad interface name {iface!r}")
     lines = ["# written by usb-router (S&D #193): captive portal on " + iface]
     lines += [f"interface-name={h},{iface}/4" for h in PROBE_HOSTS]
+    lines += _lease_line(max_clients)
     return "\n".join(lines) + "\n"
 
 
-def write_dns_conf(iface, path=None):
+def write_dns_conf(iface, path=None, max_clients=None):
     path = path or dns_conf_path()
-    text = dns_conf_text(iface)
+    text = dns_conf_text(iface, max_clients)
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         f.write(text)
@@ -89,11 +100,12 @@ class Captive:
     def active(self):
         return self.iface is not None
 
-    def prepare(self, iface):
-        """Call before the hotspot comes up: iface turns captive mode on, None turns it off."""
+    def prepare(self, iface, max_clients=None):
+        """Call before the hotspot comes up: iface turns captive mode on, None turns it off.
+        max_clients (C&G #281) caps NetworkManager's DHCP leases on the hotspot."""
         with self._lock:
             try:
-                write_dns_conf(iface, self.dns_path)
+                write_dns_conf(iface, self.dns_path, max_clients)
             except OSError as e:
                 # no DNS answers means phones say "no internet" instead of opening the page;
                 # the hotspot itself must still start

@@ -176,18 +176,22 @@ class Router:
                 chosen = next((c for c in cands if c["mode"] == "wifi" and c["ap_capable"]), None) \
                     or next((c for c in cands if c["mode"] == "ethernet"), None)
             if not chosen:
-                raise NetError("No spare adapter for the hotspot. Plug in a second Wi-Fi adapter or an Ethernet cable.")
+                # C&G #281: sharing is on by default, so say it where the operator looks (status), not only in the log
+                self.last_error = ("No spare adapter for the hotspot: the only Wi-Fi card is the internet link. "
+                                   "Plug in a second Wi-Fi adapter or an Ethernet cable.")
+                raise NetError(self.last_error)
             mode = mode or chosen["mode"]
             if self.captive:
                 # captive portal only when the hotspot has no internet to give
                 offline = role != "share" and self.uplink(devices) is None
-                self.captive.prepare(chosen["iface"] if offline else None)
+                self.captive.prepare(chosen["iface"] if offline else None, max_clients=self.cfg.max_clients())
             try:
                 if mode == "wifi":
                     if not chosen["ap_capable"]:
                         raise NetError(f"{chosen['iface']} does not support access-point mode")
                     self.nm.hotspot_start(chosen["iface"], self.cfg.get("hotspot_ssid"),
                                           password, self.cfg.get("hotspot_band"),
+                                          max_clients=self.cfg.max_clients(),
                                           **({"share": True} if role == "share" else {}))
                 else:
                     self.nm.share_ethernet_start(chosen["iface"])
@@ -230,6 +234,7 @@ class Router:
         s["password"] = self.cfg.hotspot_password() if (s["mode"] == "wifi" and local) else None
         s["last_error"] = self.last_error
         s["enabled"] = self.cfg.flag("hotspot_enabled") and not self.auto_disabled
+        s["max_clients"] = self.cfg.max_clients()    # C&G #281: the page shows "n/10"
         s["role"] = self.role if s["active"] else None
         # "setup" = we are broadcasting without an uplink so a phone can configure us
         s["setup"] = bool(s["active"] and online is False and self.role in ("setup", "manual", None))

@@ -237,7 +237,7 @@ class NetworkManager:
     HOTSPOT_CON = "usb-router-hotspot"
     SHARE_CON = "usb-router-share-"
 
-    def hotspot_start(self, iface, ssid, password, band="bg", share=False):
+    def hotspot_start(self, iface, ssid, password, band="bg", share=False, max_clients=None):
         self.hotspot_stop()
         args = ["connection", "add", "type", "wifi", "ifname", iface,
                 "con-name", self.HOTSPOT_CON, "autoconnect", "no", "ssid", ssid,
@@ -601,8 +601,8 @@ class MockNetworkManager:
     def ethernet_connect(self, iface):
         self.ethernet_plugged = True
 
-    def hotspot_start(self, iface, ssid, password, band="bg", share=False):
-        self.hotspot = {"iface": iface, "ssid": ssid, "mode": "wifi"}
+    def hotspot_start(self, iface, ssid, password, band="bg", share=False, max_clients=None):
+        self.hotspot = {"iface": iface, "ssid": ssid, "mode": "wifi", "max_clients": max_clients}
 
     def hotspot_diag(self, iface):
         refused = os.environ.get("USB_ROUTER_MOCK_REFUSED", "0") == "1"
@@ -896,7 +896,8 @@ class HostapdNetworkManager(NetworkManager):
                     nmcli("connection", "delete", ssid, check=False)
                 try:
                     self.hotspot_start(ap_iface, req.get("ssid"), req.get("password"),
-                                       req.get("band") or "bg", share=bool(req.get("share")))
+                                       req.get("band") or "bg", share=bool(req.get("share")),
+                                       max_clients=req.get("max_clients"))
                 except NetError as e2:
                     log.warning("setup hotspot did not come back after a failed join: %s", e2)
                 raise NetError(words)
@@ -917,10 +918,11 @@ class HostapdNetworkManager(NetworkManager):
         except NetError:
             return False
 
-    def hotspot_start(self, iface, ssid, password, band="bg", share=False):
+    def hotspot_start(self, iface, ssid, password, band="bg", share=False, max_clients=None):
         self.hotspot_stop()
         req = {"iface": iface, "ssid": ssid, "password": password, "band": band,
-               "channel": 6 if band != "a" else 36, "country": "ES", "share": bool(share)}
+               "channel": 6 if band != "a" else 36, "country": "ES", "share": bool(share),
+               "max_clients": max_clients}   # C&G #281: hostapd max_num_sta + dnsmasq dhcp-lease-max
         tmp = self.request_path + ".tmp"
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:

@@ -39,7 +39,8 @@ DEFAULTS = {
     "wifi_ssid_3": "", "wifi_password_3": "",
     # -- phone-based setup when there is no keyboard: hotspot while offline
     "setup_hotspot": "true",
-    "hotspot_enabled": "false",       # share the uplink once online (opt-in; the setup hotspot is separate)
+    "hotspot_enabled": "true",        # share the uplink once online (on by default since C&G #281; the setup hotspot is separate)
+    "hotspot_max_clients": "10",      # phones that may join the hotspot at once; 1-10, never more (C&G #281)
     "hotspot_ssid": "Display Player",
     "hotspot_password": "",           # blank = a unique random password is generated per stick at first boot
     "hotspot_band": "bg",             # bg = 2.4 GHz (widest compatibility), a = 5 GHz
@@ -103,6 +104,9 @@ def _decode(path):
             continue
     return None
 
+
+# C&G #281 (Shaun, 21 Nov): "10 for the moment, 10 max". The conf may lower it, never raise it.
+HOTSPOT_MAX_CLIENTS = 10
 
 # Passwords we refuse to run a hotspot with (old defaults, common guesses).
 WEAK_PASSWORDS = {"changeme123", "changeme", "password", "password1", "12345678", "123456789",
@@ -388,6 +392,12 @@ class Config:
         if changed:
             self._write_secrets()
 
+    def max_clients(self) -> int:
+        """C&G #281: the hotspot's client cap from usb-router.conf, 1..HOTSPOT_MAX_CLIENTS; anything else is the cap."""
+        v = str(self.get("hotspot_max_clients") or "").strip()
+        n = int(v) if v.isdigit() else HOTSPOT_MAX_CLIENTS
+        return max(1, min(n, HOTSPOT_MAX_CLIENTS))
+
     def hotspot_password(self) -> str:
         """The configured password if it is acceptable, else the generated per-stick one."""
         configured = self.get("hotspot_password").strip()
@@ -609,6 +619,7 @@ class Config:
             "hotspot_password": self.hotspot_password() if local else None,
             "hotspot_password_source": self.hotspot_password_source(),
             "hotspot_band": self.get("hotspot_band"),
+            "hotspot_max_clients": self.max_clients(),
             "lan_access": self.flag("lan_access"),
             # to the screen's own page only, which sends it as X-Admin-Pin (a page in the kiosk browser cannot
             # read this cross-origin). The page does not DISPLAY it when the source is "default" (S&D #193).

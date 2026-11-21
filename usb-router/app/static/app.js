@@ -518,9 +518,11 @@
     box.classList.toggle("active", h.active);
     $("hs-diag").textContent = fmtDiag(h.diag);
     if (h.active) {
+      // C&G #281: "Sharing on, n/10": how many phones are on it against the cap
+      const cap = h.max_clients ? ` · <strong>${(h.clients || []).length}/${h.max_clients}</strong> devices` : "";
       box.innerHTML = h.mode === "wifi"
-        ? `Sharing as Wi-Fi network <strong>${esc(h.ssid)}</strong> on ${esc(h.iface)} · router address ${h.ip || "10.42.0.1"}`
-        : `Sharing by cable on ${esc(h.iface)} · router address ${h.ip || "10.42.0.1"}`;
+        ? `Sharing on as Wi-Fi network <strong>${esc(h.ssid)}</strong>${cap} · on ${esc(h.iface)} · router address ${h.ip || "10.42.0.1"}`
+        : `Sharing on by cable${cap} · on ${esc(h.iface)} · router address ${h.ip || "10.42.0.1"}`;
     } else {
       box.innerHTML = h.last_error ? `<span class="error">${esc(h.last_error)}</span>` : (h.enabled ? "Will start sharing once online." : "Not sharing.");
     }
