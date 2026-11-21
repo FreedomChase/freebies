@@ -41,6 +41,9 @@ UNIT = "usb-router-hotspot.service"
 ADDR, PREFIX = "10.42.0.1", 24
 DHCP_RANGE = "10.42.0.10,10.42.0.100,255.255.255.0,2h"
 NFT_TABLE = "usbrouter_ap"
+# C&G #281: guests on the sharing hotspot reach the internet only, never the venue's network or each other. The same
+# list is in scripts/usb-router-lan-guard (the NetworkManager path); a test keeps the two equal.
+GUARD_PRIVATE = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "100.64.0.0/10")
 
 IFACE_RE = re.compile(r"^[A-Za-z0-9_.-]{1,15}$")
 CAPTIVE_LINE = re.compile(r"^interface-name=([A-Za-z0-9.-]{1,253}),([A-Za-z0-9_.-]{1,15})/4$")
@@ -110,6 +113,8 @@ def hostapd_conf(v):
         "auth_algs=1",
         "ignore_broadcast_ssid=0",
         "macaddr_acl=0",
+        # C&G #281: phones on the hotspot cannot reach each other over the air
+        "ap_isolate=1",
         # C&G #281: the 11th phone is refused at association (hostapd answers "AP is full")
         f"max_num_sta={v.get('max_clients', MAX_CLIENTS)}",
         "wpa=2",
@@ -290,6 +295,12 @@ def _which(name):
     return name
 
 
+def guard_rules(iface):
+    """C&G #281: the forward filter that keeps guests off private addresses (the stick itself is INPUT, not forward)."""
+    return (f"table ip {NFT_TABLE} {{\n  chain guard {{\n    type filter hook forward priority -10; policy accept;\n"
+            f"    iifname \"{iface}\" ip daddr {{ {', '.join(GUARD_PRIVATE)} }} counter drop\n  }}\n}}\n")
+
+
 def _down(iface, share):
     if iface:
         _sh("ip", "addr", "flush", "dev", iface)
@@ -370,6 +381,16 @@ def run():
         _sh(nft, "add", "chain", "ip", NFT_TABLE, "post", "{ type nat hook postrouting priority 100 ; }")
         _sh(nft, "add", "rule", "ip", NFT_TABLE, "post", "ip", "saddr", f"{ADDR.rsplit('.', 1)[0]}.0/{PREFIX}",
             "oifname", "!=", iface, "masquerade")
+        try:
+            g = subprocess.run([nft, "-f", "-"], input=guard_rules(iface), text=True, capture_output=True, timeout=20)
+            err = "" if g.returncode == 0 else (g.stderr.strip() or f"nft exit {g.returncode}")
+        except (OSError, subprocess.TimeoutExpired) as e:
+            err = str(e)
+        if err:   # fail closed: no guard, no sharing (the hotspot stays up for the setup page, without internet)
+            _sh(nft, "delete", "table", "ip", NFT_TABLE)
+            print(f"usb-router hotspot: LAN guard on {iface} FAILED ({err}); sharing stopped", flush=True)
+        else:
+            print(f"usb-router hotspot: LAN guard on {iface}: guests reach the internet only", flush=True)
     dnsmasq = subprocess.Popen([_which("dnsmasq"), "-k", f"--conf-file={dconf}", "--pid-file="])
     procs.append(dnsmasq)
     handled = _scan_requested(0) or 0.0

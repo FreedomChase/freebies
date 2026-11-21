@@ -1,0 +1,41 @@
+#!/bin/sh
+# C&G #281: phones on the Display Player's sharing hotspot reach the internet, never the venue's own network.
+# Sharing is on by default, so a guest on the stick's hotspot must not reach the venue's tills, printers or other
+# hosts behind the uplink, nor the other phones on the hotspot. One nft table per hotspot interface drops anything
+# forwarded from it to a private, link-local or carrier-grade NAT address. The stick itself (its setup page, DNS,
+# DHCP) is INPUT, not forward, so it stays reachable.
+#
+#   usb-router-lan-guard up IFACE      load the guard for IFACE (replaces an older one)
+#   usb-router-lan-guard down IFACE    remove it
+#
+# Called as root: by hotspot_ap.py (hostapd path) and by the NetworkManager dispatcher (NM path,
+# system/usb-router-nm-dispatcher). NFT=/path/to/nft overrides the binary (tests).
+set -eu
+NFT=${NFT:-nft}
+ACTION=${1:-}
+IFACE=${2:-}
+case "$IFACE" in
+  ""|*[!A-Za-z0-9_.-]*) echo "usb-router-lan-guard: bad interface name '$IFACE'" >&2; exit 2 ;;
+esac
+TABLE="usb_router_guard_$(printf '%s' "$IFACE" | tr -c 'A-Za-z0-9_\n' '_')"
+PRIVATE="10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10"
+
+case "$ACTION" in
+  up)
+    "$NFT" delete table ip "$TABLE" 2>/dev/null || true
+    "$NFT" -f - <<EOF
+table ip $TABLE {
+  chain forward {
+    type filter hook forward priority -10; policy accept;
+    iifname "$IFACE" ip daddr { $PRIVATE } counter drop
+  }
+}
+EOF
+    echo "usb-router-lan-guard: $IFACE: guests reach the internet only (table $TABLE)"
+    ;;
+  down)
+    "$NFT" delete table ip "$TABLE" 2>/dev/null || true
+    ;;
+  *)
+    echo "usage: usb-router-lan-guard up|down IFACE" >&2; exit 2 ;;
+esac

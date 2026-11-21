@@ -246,6 +246,9 @@ class NetworkManager:
                 # joins on auto channel / powersave with some phones (S&D #193)
                 "802-11-wireless.channel", "6" if band == "bg" else "36",
                 "802-11-wireless.powersave", "2",
+                # C&G #281: phones on the hotspot cannot reach each other over the air (the dispatcher's LAN guard
+                # keeps them off the venue's network: system/usb-router-nm-dispatcher)
+                "802-11-wireless.ap-isolation", "yes",
                 "ipv4.method", "shared", "ipv6.method", "ignore"]
         if password:
             # pmf disable: left at default, NetworkManager (1.42) makes a wpa-psk AP WPA2/WPA3

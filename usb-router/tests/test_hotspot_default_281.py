@@ -173,3 +173,99 @@ def test_the_shipped_example_conf_keeps_sharing_on_with_a_cap_of_10(tmp_path, mo
     cfg = _config(tmp_path, monkeypatch, open(example, encoding="utf-8").read())
     assert cfg.flag("hotspot_enabled") is True
     assert cfg.max_clients() == 10
+
+
+# -- r2 (security + dev4, 21 Nov): LAN guard, isolation, PIN, legal line ------------------------------------
+
+import re  # noqa: E402
+import subprocess  # noqa: E402
+
+HERE = os.path.dirname(__file__)
+ROOT = os.path.join(HERE, "..")
+
+
+def test_hostapd_isolates_phones_from_each_other():
+    v = hotspot_ap.validate({**GOOD, "share": True, "max_clients": 10})
+    assert "ap_isolate=1" in hotspot_ap.hostapd_conf(v).splitlines()
+
+
+def test_guard_rules_drop_every_private_range_from_the_hotspot_only():
+    text = hotspot_ap.guard_rules("wlan1")
+    assert "hook forward" in text and 'iifname "wlan1"' in text and "drop" in text
+    for net in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "100.64.0.0/10"):
+        assert net in text
+
+
+def test_the_shell_guard_and_the_python_guard_drop_the_same_ranges():
+    sh = open(os.path.join(ROOT, "scripts", "usb-router-lan-guard"), encoding="utf-8").read()
+    listed = re.search(r'^PRIVATE="([^"]+)"', sh, re.M).group(1)
+    assert tuple(x.strip() for x in listed.split(",")) == hotspot_ap.GUARD_PRIVATE
+
+
+def test_networkmanager_hotspot_turns_on_ap_isolation(monkeypatch):
+    calls = []
+    monkeypatch.setattr(netman, "nmcli", lambda *a, **k: calls.append(a) or "")
+    netman.NetworkManager().hotspot_start("wlan1", "Display Player", "Str0ng-pass-281", share=True, max_clients=10)
+    add = next(c for c in calls if c[:2] == ("connection", "add"))
+    i = add.index("802-11-wireless.ap-isolation")
+    assert add[i + 1] == "yes"
+
+
+def _fake_bin(tmp_path, name):
+    log = tmp_path / f"{name}.log"
+    f = tmp_path / name
+    f.write_text(f'#!/bin/sh\necho "$@" >> "{log}"\n[ -z "$FAIL" ]\n', encoding="utf-8")
+    f.chmod(0o755)
+    return f, log
+
+
+@pytest.mark.parametrize("con,called", [("usb-router-hotspot", True), ("usb-router-share-eth1", True), ("Venue WiFi", False)])
+def test_dispatcher_loads_the_guard_only_for_our_sharing_connections(tmp_path, con, called):
+    guard, log = _fake_bin(tmp_path, "guard")
+    env = dict(os.environ, CONNECTION_ID=con, USB_ROUTER_LAN_GUARD=str(guard))
+    disp = os.path.join(ROOT, "system", "usb-router-nm-dispatcher")
+    assert subprocess.run(["sh", disp, "wlan1", "up"], env=env).returncode == 0
+    assert subprocess.run(["sh", disp, "wlan1", "down"], env=env).returncode == 0
+    got = log.read_text().splitlines() if log.exists() else []
+    assert got == (["up wlan1", "down wlan1"] if called else [])
+
+
+def test_dispatcher_fails_closed_when_the_guard_cannot_load(tmp_path):
+    guard, _ = _fake_bin(tmp_path, "guard")
+    nm, nmlog = _fake_bin(tmp_path, "nmcli")
+    env = dict(os.environ, CONNECTION_ID="usb-router-hotspot", USB_ROUTER_LAN_GUARD=str(guard), NMCLI=str(nm), FAIL="1")
+    subprocess.run(["sh", os.path.join(ROOT, "system", "usb-router-nm-dispatcher"), "wlan1", "up"], env=env)
+    assert nmlog.read_text().split() == ["connection", "down", "id", "usb-router-hotspot"]
+
+
+def test_lan_guard_script_refuses_a_bad_interface_name(tmp_path):
+    nft, log = _fake_bin(tmp_path, "nft")
+    r = subprocess.run(["sh", os.path.join(ROOT, "scripts", "usb-router-lan-guard"), "up", "wlan1; rm -rf /"],
+                       env=dict(os.environ, NFT=str(nft)), capture_output=True, text=True)
+    assert r.returncode == 2 and not log.exists()
+
+
+@pytest.mark.parametrize("sharing,source", [("true", "generated"), ("false", "default")])
+def test_the_shared_default_pin_is_off_while_sharing_is_on(tmp_path, monkeypatch, sharing, source):
+    pin_file = tmp_path / "default-pin"
+    pin_file.write_text("246813\n", encoding="utf-8")
+    monkeypatch.setenv("USB_ROUTER_DEFAULT_PIN_FILE", str(pin_file))
+    cfg = _config(tmp_path, monkeypatch, f"[usb-router]\nhotspot_enabled = {sharing}\n")
+    assert cfg.admin_pin_source() == source
+    assert (cfg.admin_pin() == "246813") is (source == "default")
+
+
+def test_setup_page_says_who_is_responsible_and_what_is_logged():
+    html = open(os.path.join(ROOT, "app", "templates", "index.html"), encoding="utf-8").read()
+    line = re.search(r'<p class="hint" id="hs-legal">([^<]+)</p>', html).group(1)
+    assert "responsible" in line and "14 days" in line and "never the sites" in line
+
+
+def test_every_installer_puts_the_guard_and_the_journal_cap_in_place():
+    pc = open(os.path.join(ROOT, "scripts", "install-local.sh"), encoding="utf-8").read()
+    live = open(os.path.join(ROOT, "build", "live", "config", "hooks", "live", "0500-usb-router.hook.chroot"), encoding="utf-8").read()
+    pi = open(os.path.join(ROOT, "pizero", "install-pizero.sh"), encoding="utf-8").read()
+    for text in (pc, live):
+        assert "dispatcher.d/50-usb-router-lan-guard" in text and "usb-router-journald.conf" in text
+    assert "nftables" in pc.split("PKGS=", 1)[1].splitlines()[0]
+    assert "usb-router-journald.conf" in pi

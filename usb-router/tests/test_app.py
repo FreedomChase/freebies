@@ -691,6 +691,7 @@ def test_default_pin_from_the_image(tmp_path, monkeypatch):
     server._pin_failures.clear()
     cfg = server.cfg
     cfg.values["admin_pin"] = ""                       # a usb-router.conf on this machine must not decide the test
+    cfg.values["hotspot_enabled"] = "false"            # C&G #281: while sharing is on the default PIN is off
     assert cfg.admin_pin_source() == "default" and cfg.admin_pin() == "1234567890123456"
     with server.app.test_client() as c:
         remote = {"REMOTE_ADDR": "10.42.0.51"}

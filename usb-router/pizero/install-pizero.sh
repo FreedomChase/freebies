@@ -84,6 +84,9 @@ install -m 644 "$HERE/system/usb-router-connect.service" /etc/systemd/system/
 # the setup hotspot: hostapd + dnsmasq as root, started by the app over polkit (S&D #193).
 # hostapd's own service stays off: only this unit runs it, with a config made at each start.
 install -m 644 "$HERE/system/usb-router-hotspot.service" /etc/systemd/system/
+# C&G #281: the journal (hotspot DHCP lines: MAC, address, time) is kept at most 14 days
+install -d /etc/systemd/journald.conf.d
+install -m 644 "$HERE/system/usb-router-journald.conf" /etc/systemd/journald.conf.d/usb-router.conf
 systemctl unmask hostapd.service >/dev/null 2>&1 || true
 systemctl disable hostapd.service >/dev/null 2>&1 || true
 install -d /etc/polkit-1/rules.d /etc/NetworkManager/conf.d

@@ -429,7 +429,9 @@ class Config:
             return "config"
         if self.secrets.get("admin_pin_new") == "1":
             return "new"
-        if self.default_pin():
+        # C&G #281 (security): while sharing is on, guests on the hotspot can open the setup page, and the image's
+        # default PIN is the same on every stick (one leak opens every venue), so this stick's own PIN applies.
+        if self.default_pin() and not self.flag("hotspot_enabled"):
             return "default"
         return "generated"
 

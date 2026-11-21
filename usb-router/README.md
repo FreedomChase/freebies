@@ -85,12 +85,43 @@ is offline; F11 toggles fullscreen.
 NetworkManager's shared mode provides DHCP (dnsmasq), DNS forwarding and NAT.
 Hotspot clients get `10.42.0.x`; the stick is `10.42.0.1`.
 
-At most `hotspot_max_clients` phones (default and ceiling 10) share at once. The cap
-is enforced twice: hostapd `max_num_sta` refuses the 11th association, and dnsmasq
-`dhcp-lease-max` refuses the 11th address ("no leases left"; shown with real
-dnsmasq by `sudo sh tests/dhcp_cap_281.sh`). The setup page shows
-"Sharing on ... n/10 devices". A stick online over Wi-Fi with no spare adapter
-shows "No spare adapter" instead: it cannot share.
+### Sharing: the cap, the guard, the PIN and what is logged (C&G #281)
+
+- **Cap.** At most `hotspot_max_clients` phones (default and ceiling 10; a value of
+  0 becomes 1, use `hotspot_enabled = false` to switch sharing off) share at once.
+  How it is enforced depends on the image:
+  - **Pi Zero (hostapd path):** twice. hostapd `max_num_sta` refuses the 11th
+    association, and dnsmasq `dhcp-lease-max` refuses the 11th address.
+  - **PC stick (NetworkManager path, no hostapd):** by DHCP only. The 11th phone gets
+    no address ("no leases left"), but a device whose owner knows the hotspot password
+    and types an address by hand still gets on. Security ruled this a capacity limit,
+    not a security boundary: that person already holds the password.
+  - Shown with real dnsmasq by `sudo sh tests/dhcp_cap_281.sh`. A person with the
+    password can still take all 10 places (accepted).
+- **LAN guard.** Guests reach the internet only. Anything they send to a private,
+  link-local or carrier-grade NAT address (10/8, 172.16/12, 192.168/16, 169.254/16,
+  100.64/10) is dropped, so the venue's tills, printers and other hosts behind the
+  uplink are out of reach, and so are the other phones (Wi-Fi client isolation as
+  well: hostapd `ap_isolate=1`, NetworkManager `ap-isolation yes`). The stick's own
+  setup page stays reachable. hostapd path: `hotspot_ap.py` loads it with the NAT
+  rule. NetworkManager path: `/etc/NetworkManager/dispatcher.d/50-usb-router-lan-guard`
+  runs `scripts/usb-router-lan-guard` as root. If the guard cannot load, sharing stops
+  (fail closed).
+- **PIN.** While sharing is on, the image's shared default PIN is not accepted; the
+  stick's own generated PIN applies, shown on its screen only. Guests can open the
+  setup page, and one leaked default PIN must not open every venue.
+- **Logging.** dnsmasq writes each lease (device MAC, the name the device gives itself
+  if any, address, time; never the sites visited) to the system journal, kept at most
+  14 days
+  (`/etc/systemd/journald.conf.d/usb-router.conf`).
+- **Who is responsible.** The setup page says so in plain words: the venue is
+  responsible for how its guests use the connection.
+- **Sticks flashed before this change** keep `hotspot_enabled = false` from the old
+  example file on their USBROUTER partition, so they do not start sharing until they are
+  re-flashed or that line is changed.
+
+The setup page shows "Sharing on ... n/10 devices". A stick online over Wi-Fi with no
+spare adapter shows "No spare adapter" instead: it cannot share.
 
 ## What is in this folder
 
@@ -175,7 +206,7 @@ All keys are in `config/usb-router.conf.example`. The important ones:
 | `hotspot_password` | blank = generated per stick | Hotspot password. Weak values (`changeme…`, `password`, `12345678`) are refused |
 | `admin_pin` | blank = image default PIN, else generated per stick | PIN required for every change; a generated or New PIN is shown on the screen only, the default never |
 | `hotspot_enabled`, `hotspot_ssid`, `hotspot_band` | `true`, `Display Player`, `bg` | Share the connection with nearby devices once online (on by default) |
-| `hotspot_max_clients` | `10` | Phones that may share at once, 1 to 10; can be lowered, never raised |
+| `hotspot_max_clients` | `10` | Phones that may share at once, 1 to 10 (0 becomes 1); can be lowered, never raised |
 | `lan_access` | `true` | Serve the setup page to hotspot clients (PIN still required) |
 | `fleet_url`, `fleet_token`, `fleet_interval` | empty, empty, 60 | Fleet dashboard. No token = the client stays off |
 | `allow_exit` | `false` | Quit button / Ctrl+Q |

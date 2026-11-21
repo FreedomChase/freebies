@@ -1,0 +1,21 @@
+#!/bin/sh
+# C&G #281: NetworkManager runs this as root on every connection change. When the sharing hotspot
+# (usb-router-hotspot) or a wired share (usb-router-share-*) comes up, the LAN guard is loaded for its interface,
+# so guests reach the internet and not the venue's network; when it goes down, the guard goes too.
+# Installed as /etc/NetworkManager/dispatcher.d/50-usb-router-lan-guard (root-owned, 755).
+GUARD=${USB_ROUTER_LAN_GUARD:-/opt/usb-router/scripts/usb-router-lan-guard}
+IFACE="$1"
+ACTION="$2"
+case "${CONNECTION_ID:-}" in
+  usb-router-hotspot|usb-router-share-*) ;;
+  *) exit 0 ;;
+esac
+case "$ACTION" in
+  up)
+    # fail closed: without the guard there is no sharing, so the connection goes down
+    "$GUARD" up "$IFACE" && exit 0
+    echo "usb-router: LAN guard on $IFACE FAILED; taking $CONNECTION_ID down" >&2
+    exec ${NMCLI:-nmcli} connection down id "$CONNECTION_ID" ;;
+  down|pre-down) exec "$GUARD" down "$IFACE" ;;
+esac
+exit 0

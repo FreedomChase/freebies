@@ -12,7 +12,7 @@ NO_X=0; [ "${1:-}" = "--no-x" ] && NO_X=1
 
 echo "==> packages"
 apt-get update
-PKGS="network-manager dnsmasq-base iw wireless-regdb python3 python3-flask python3-qrcode python3-pil curl"
+PKGS="network-manager dnsmasq-base nftables iw wireless-regdb python3 python3-flask python3-qrcode python3-pil curl"
 [ "$NO_X" -eq 0 ] && PKGS="$PKGS xserver-xorg xinit openbox unclutter-xfixes x11-xserver-utils python3-pyqt6 python3-pyqt6.qtwebengine fonts-dejavu fonts-noto-core"
 # shellcheck disable=SC2086
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $PKGS
@@ -33,6 +33,12 @@ install -m 644 "$HERE/system/config.mount" /etc/systemd/system/
 rm -f /etc/polkit-1/rules.d/50-usb-router-networkmanager.rules
 install -m 644 "$HERE/system/40-usb-router-networkmanager.rules" /etc/polkit-1/rules.d/
 install -m 644 "$HERE/system/usb-router-networkmanager.conf" /etc/NetworkManager/conf.d/usb-router.conf
+# C&G #281: the LAN guard for the sharing hotspot (guests reach the internet only), loaded by NetworkManager as root
+install -d /etc/NetworkManager/dispatcher.d
+install -m 755 "$HERE/system/usb-router-nm-dispatcher" /etc/NetworkManager/dispatcher.d/50-usb-router-lan-guard
+chmod 755 /opt/usb-router/scripts/usb-router-lan-guard
+install -d /etc/systemd/journald.conf.d
+install -m 644 "$HERE/system/usb-router-journald.conf" /etc/systemd/journald.conf.d/usb-router.conf
 # captive portal (S&D #193): NetworkManager's hotspot dnsmasq reads the app's file through this link
 install -d /etc/NetworkManager/dnsmasq-shared.d
 [ -e /var/lib/usb-router/captive-dns.conf ] || : > /var/lib/usb-router/captive-dns.conf
