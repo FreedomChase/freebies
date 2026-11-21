@@ -59,7 +59,8 @@ def _lease_line(max_clients):
     n = int(max_clients)
     if not 1 <= n <= 10:
         raise ValueError(f"bad client cap {max_clients!r}")
-    return [f"dhcp-lease-max={n}"]
+    # C&G #281: log-dhcp too, so each lease (MAC, address, name) reaches the journal on the NM path as on hostapd's
+    return [f"dhcp-lease-max={n}", "log-dhcp"]
 
 
 def dns_conf_text(iface, max_clients=None):

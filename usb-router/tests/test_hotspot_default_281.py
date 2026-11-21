@@ -269,3 +269,10 @@ def test_every_installer_puts_the_guard_and_the_journal_cap_in_place():
         assert "dispatcher.d/50-usb-router-lan-guard" in text and "usb-router-journald.conf" in text
     assert "nftables" in pc.split("PKGS=", 1)[1].splitlines()[0]
     assert "usb-router-journald.conf" in pi
+
+
+def test_nm_path_logs_each_lease():
+    """C&G #281 r3 (security 85): NM 1.46 starts its shared dnsmasq without --log-dhcp, so the conf-dir file says it"""
+    for iface in (None, "wlan1"):
+        assert "log-dhcp" in captive.dns_conf_text(iface, 10).splitlines()
+    assert "log-dhcp" not in captive.dns_conf_text(None).splitlines()   # no cap = not sharing: nothing extra
